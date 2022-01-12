@@ -1,0 +1,8 @@
+Cython
+matplotlib
+pandas
+dash
+ECAgent
+Pillow
+argparse
+animatplot
