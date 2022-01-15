@@ -1,20 +1,16 @@
 {
-  "iterations" : 10,
+  "iterations" : 0,
   "epochs" : 0,
   "custom_params" : {},
 
   "model" : {
-    "name" : "EgyptModel",
+    "name" : "GECCOModel",
     "params" : {
-      "seed" : 787234,
       "iterations": 10000,
       "img_height" : 100,
       "img_width" : 100,
       "start_x": 0,
       "start_y": 0,
-      "heightmap_url" : "./resources/Faiyum_to_Luxor.png",
-      "water_mask" : "./resources/Faiyum_to_Luxor_River_Mask.png",
-      "soil_mask" : "./resources/Faiyum_to_Luxor_Soil_Mask.png",
       "max_height" : 1400,
       "min_height" : 0,
       "cell_dim" : 2000
@@ -33,8 +29,6 @@
         "end_temp" : [13,27],
         "start_rainfall" : [25, 28],
         "end_rainfall" : [10, 13],
-        "start_flood" : [0, 0],
-        "end_flood" : [0, 0],
         "soil_depth" : 1000,
         "interpolator_range": 10000,
         "temperature_dict": {
@@ -46,12 +40,6 @@
         "rainfall_dict": {
           "id": "cosine",
           "frequency": 64,
-          "k": 1,
-          "m": 1
-        },
-        "flood_dict": {
-          "id": "linear",
-          "frequency": 16,
           "k": 1,
           "m": 1
         }
@@ -66,8 +54,7 @@
         "priority" : 9,
         "L" : 9.5,
         "N" : 30,
-        "I" : 86.5,
-        "flood_cell_divide": 100
+        "I" : 86.5
       }
     },
     {
@@ -142,11 +129,11 @@
       {
         "id": "APS",
         "priority": 4,
-        "birth_rate": 0.0015,
+        "birth_rate": 0.00135,
         "death_rate": 0.001,
-        "yrs_per_move": 3,
-        "init_settlements":  25,
-        "cell_capacity": 20
+        "yrs_per_move": 5,
+        "init_settlements":  4,
+        "cell_capacity": 100
       }
     }
   ],
@@ -165,6 +152,7 @@
         "init_occupants": 6,
         "init_age_range": [13, 25],
         "vision_square": 2500,
+        "move_lookback": 3,
         "load_difference": 0.6,
         "init_preference": 1562.5,
         "learning_rate_range": [0.05, 0.2],
@@ -176,14 +164,7 @@
       "post_agent_init": {
         "func": "init_settlements",
         "params": {
-          "strategy": "grouped",
-          "clusters": [[80, 25], [60, 50], [60, 100], [45, 160], [65,200], [105, 250], [125, 275]],
-          "range": 20,
-          "adjust_ranges": [
-            [0.15, 0.45, 0.15, 0.45],
-            [0.15, 0.45, 0.15, 0.45],
-            [0.15, 0.45, 0.15, 0.45],
-            [0.45, 0.45, 0.55, 0.45]]
+          "strategy": "random"
         }
       }
     }
