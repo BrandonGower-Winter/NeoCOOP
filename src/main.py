@@ -19,7 +19,7 @@ default_path = './resources/traditional/scenario3/'
 store_path = 'EgyptModel'
 
 
-class EgyptModel(Model, IDecodable, ILoggable):
+class GECCOModel(Model, IDecodable, ILoggable):
 
     pool_count = 0
     pool = None
@@ -31,7 +31,7 @@ class EgyptModel(Model, IDecodable, ILoggable):
     def __init__(self, width: int, height: int, iterations: int, start_x: int, start_y: int, min_height: int,
                  max_height: int, cellSize: int, debug: bool = True):
 
-        Model.__init__(self, seed=EgyptModel.seed, logger=None)
+        Model.__init__(self, seed=GECCOModel.seed, logger=None)
         IDecodable.__init__(self)
         ILoggable.__init__(self, logger_name='model', level=logging.INFO)
 
@@ -56,39 +56,31 @@ class EgyptModel(Model, IDecodable, ILoggable):
         from PIL import Image
 
         im = Image.open(path_to_decoder_file + 'heightmap.png').convert('L')
-        water_im = Image.open(path_to_decoder_file + 'rivermask.png').convert('L')
         soil_mask = Image.open(path_to_decoder_file + 'soilmask.png').convert('L')
         slope_img = Image.open(path_to_decoder_file + 'slope_map.png').convert('L')
 
         height_diff = self.max_height - self.min_height
 
         heightmap = []
-        water_map = []
         soil_map = []
         slope_map = []
 
         for x in range(self.start_x, self.start_x + self.environment.width):
             row = []
-            water_row = []
             soil_row = []
             slope_row = []
 
             for y in range(self.start_y, self.start_y + self.environment.height):
                 row.append(self.min_height + (im.getpixel((x, y)) / 255.0 * height_diff))
-                water_row.append(water_im.getpixel((x, y)))
                 soil_row.append((soil_mask.getpixel((x, y)) / 255.0 * 100))
                 slope_row.append(slope_img.getpixel((x, y)) / 255.0)
 
             heightmap.append(row)
-            water_map.append(water_row)
             soil_map.append(soil_row)
             slope_map.append(slope_row)
 
         def elevation_generator_functor(pos, cells):
             return heightmap[pos[0]][pos[1]]
-
-        def is_water_generator(pos, cells):
-            return water_map[pos[0]][pos[1]] != 0.0
 
         def soil_generator(pos, cells):
             return soil_map[pos[0]][pos[1]]
@@ -97,10 +89,6 @@ class EgyptModel(Model, IDecodable, ILoggable):
             return 1.0 - slope_map[pos[0]][pos[1]]
 
         self.environment.addCellComponent('height', elevation_generator_functor)
-
-        logging.info('\t-Generating Watermap')
-
-        self.environment.addCellComponent('isWater', is_water_generator)
 
         # Generate slope data
 
@@ -126,19 +114,8 @@ class EgyptModel(Model, IDecodable, ILoggable):
         if 'start_y' in params:
             start_y = params['start_y']
 
-        return EgyptModel(width, height, params['iterations'],
+        return GECCOModel(width, height, params['iterations'],
                           start_x, start_y, min_height, max_height, params['cell_dim'])
-
-
-class CellComponent(Component):
-
-    def __init__(self, agent, model):
-        super().__init__(agent, model)
-
-        self.height = 0
-        self.slope = 0
-        self.isWater = False
-        self.waterAvailability = 0
 
 
 def parseArgs():
@@ -148,6 +125,9 @@ def parseArgs():
     parser.add_argument('-v', '--visualize', help='Will start a dash applet to display a summary of the simulation.',
                         action='store_true')
     parser.add_argument('-d', '--debug', help='Sets the model to debug mode. Output printed to terminal will be verbose',
+                        action='store_true')
+    parser.add_argument('-p', '--profile',
+                        help='Sets the model to profile mode. Will write all data to file called profile.html',
                         action='store_true')
     parser.add_argument('-l', '--log', help='Tell the application to generate a log file for this run of the simulation.',
                         action='store_true')
@@ -205,7 +185,7 @@ def init_settlements(params : dict):
                 pos_y = model.random.randrange(0, model.environment.height)
 
             unq_id = env.discreteGridPosToID(pos_x, pos_y, model.environment.width)
-            if model.environment.cells['isSettlement'][unq_id] == -1 and not model.environment.cells['isWater'][unq_id]:
+            if model.environment.cells['isSettlement'][unq_id] == -1:
                 model.environment[SettlementRelationshipComponent].settlements[sID].pos.append(unq_id)
                 model.environment.cells.at[unq_id, 'isSettlement'] = sID
                 model.logger.info('CREATE.SETTLEMENT: {} {}'.format(sID, unq_id))
@@ -248,8 +228,11 @@ def init_settlements(params : dict):
             model.logger.info('REMOVE.SETTLEMENT.DELETED: {}'.format(sID))
 
 
-if __name__ == '__main__':
+parser = None
 
+
+def main():
+    global parser
     parser = parseArgs()
 
     start_time = time.time()
@@ -264,32 +247,34 @@ if __name__ == '__main__':
     addFileHandler(parser.base + '/events.log', parser.log)
 
     logging.info("Creating Model...")
-    EgyptModel.seed = parser.seed
+    GECCOModel.seed = parser.seed
     model = JsonDecoder().decode(parser.file + '/decoder.json')
 
     if parser.record:
         logging.info('\t-Adding Environment Data Collector.')
         os.mkdir(parser.base + '/environment')
-        model.systemManager.addSystem(VegetationSnapshotCollector('VSC', model, parser.base + '/environment', parser.frequency))
+        model.systemManager.addSystem(
+            VegetationSnapshotCollector('VSC', model, parser.base + '/environment', parser.frequency))
         logging.info('\t-Adding Agent Data Collector.')
         os.mkdir(parser.base + '/agents')
         model.systemManager.addSystem(AgentSnapshotCollector('ASC', model, parser.base + '/agents', parser.frequency))
         logging.info('\t-Adding Settlement Data Collector.')
         os.mkdir(parser.base + '/settlements')
-        model.systemManager.addSystem(SettlementSnapshotCollector('SSC', model, parser.base + '/settlements', parser.frequency))
+        model.systemManager.addSystem(
+            SettlementSnapshotCollector('SSC', model, parser.base + '/settlements', parser.frequency))
 
     logging.info('...Done!')
 
     model.debug = parser.debug
-    EgyptModel.pool_count = multiprocessing.cpu_count() if parser.thread else 0
-    EgyptModel.pool = multiprocessing.Pool(processes=EgyptModel.pool_count) if EgyptModel.pool_count != 0 else None
+    GECCOModel.pool_count = multiprocessing.cpu_count() if parser.thread else 0
+    GECCOModel.pool = multiprocessing.Pool(processes=GECCOModel.pool_count) if GECCOModel.pool_count != 0 else None
 
     if parser.thread:
         logging.info('Multiprocessing Enabled, {} processes created.'.format(model.pool_count))
 
     if parser.record:
         logging.info('All data snapshots will be written to: {}/environment/, {}/agents/ and {}/settlements/'.format(
-            parser.base,parser.base, parser.base))
+            parser.base, parser.base, parser.base))
 
     if parser.log:
         logging.info('All logged events will be written to the file: {}/events.log'.format(parser.base))
@@ -306,3 +291,7 @@ if __name__ == '__main__':
             break
 
     logging.info('Simulation Completed:\nTime Elapsed ({}s)'.format(time.time() - start_time))
+
+
+if __name__ == '__main__':
+    main()

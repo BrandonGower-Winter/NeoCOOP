@@ -52,13 +52,6 @@ cdef class CSoilMoistureSystemFunctions:
         return soil_depth * lerp(0.3, 0.7, 1 - (sand_content / 100.0))
 
     @staticmethod
-    def is_flooded(height, pos, sm_comp, global_env_comp):
-        if global_env_comp.flood == 0:
-            return False
-        else:
-            return height < global_env_comp.flood + sm_comp.avgWaterHeight(pos)
-
-    @staticmethod
     def SMProcess(df, sm_comp, global_env_comp) -> [float]:
         cdef int i
         cdef float PET
@@ -73,14 +66,7 @@ cdef class CSoilMoistureSystemFunctions:
         cdef np.ndarray[double] heightmap = df['height'].to_numpy()
         cdef np.ndarray[double] soil_vals = df['moisture'].to_numpy()
 
-        cdef np.ndarray is_flooded = np.full(len(soil_vals), False, dtype=np.bool)
-
-        if global_env_comp.flood != 0:
-            water_heights = np.array([sm_comp.avgWaterHeight(pos) for pos in df['pos']], dtype=np.double)
-            is_flooded = heightmap < (water_heights + global_env_comp.flood)
-
-        cdef np.ndarray[double] flooded_vals = global_env_comp.soil_depth * (0.3 + (0.4 * (1 - sand_content/100.0)))
-        cdef np.ndarray[double] non_flooded_vals = soil_vals.copy()
+        cdef np.ndarray[double] max_vals = global_env_comp.soil_depth * (0.3 + (0.4 * (1 - sand_content/100.0)))
         # For Each Month
         for i in range(12):
 
@@ -90,15 +76,13 @@ cdef class CSoilMoistureSystemFunctions:
 
             # Calculate new soil values
             if PET > global_env_comp.rainfall[i]: # When Rainfall is lower than PET
-                non_flooded_vals = np.maximum(non_flooded_vals - (PET - global_env_comp.rainfall[i]) *
+                soil_vals = np.maximum(soil_vals - (PET - global_env_comp.rainfall[i]) *
                         ((1 + alpha) / (1 + alpha * ((soil_vals / global_env_comp.soil_depth) ** beta))), 0)
 
             else: # When Rainfall is higher than PET
-                non_flooded_vals = non_flooded_vals + (global_env_comp.rainfall[i] - PET)
-                non_flooded_vals = np.minimum(non_flooded_vals, flooded_vals)
+                soil_vals = soil_vals + (global_env_comp.rainfall[i] - PET)
+                soil_vals = np.minimum(soil_vals, max_vals)
 
-        # Apply new soil values
-        soil_vals = np.where(is_flooded, flooded_vals, non_flooded_vals)
         return soil_vals
 
 #######################################################################################################################
@@ -136,7 +120,6 @@ cdef class CVegetationGrowthSystemFunctions:
     def VGProcess(df, vg_comp, sm_comp, ge_comp, random) -> ([float], [float]):
 
         cdef float r, topt
-
 
         cdef np.ndarray[double] veg_cells = df['vegetation'].to_numpy()
         cdef np.ndarray[double] moist_cells = df['moisture'].to_numpy()
@@ -199,14 +182,6 @@ cdef class CAgentResourceConsumptionSystemFunctions:
 #######################################################################################################################
 
 cdef class CAgentResourceAcquisitionFunctions:
-    @staticmethod
-    def num_to_farm(float threshold, int maxFarm, object random):
-        cdef int numToFarm, index
-        numToFarm = 0
-        for index in range(maxFarm):
-            if random.random() < threshold:
-                numToFarm += 1
-        return numToFarm
 
     @staticmethod
     def num_to_farm_phouse(float threshold, int maxFarm, object random, float farm_utility, float forage_utility):
@@ -227,7 +202,7 @@ cdef class CAgentResourceAcquisitionFunctions:
 
     @staticmethod
     def generateNeighbours(int xPos, int yPos, int width, int height, int radius, np.ndarray owned_cells,
-                           np.ndarray settlement_cells, np.ndarray water_cells):
+                           np.ndarray settlement_cells):
         cdef int x, y, id
         cdef list toReturn
 
@@ -237,8 +212,31 @@ cdef class CAgentResourceAcquisitionFunctions:
 
                 id = discreteGridPosToID(x, y, width)
 
-                if owned_cells[id] == -1 and settlement_cells[id] == -1 and not water_cells[id]:
+                if owned_cells[id] == -1 and settlement_cells[id] == -1:
                     toReturn.append(id)
+
+        return toReturn
+
+    @staticmethod
+    def generateBorderCells(int xPos, int yPos, int width, int height, int radius):
+
+        cdef int x, y
+        cdef list toReturn = []
+
+        cdef int x_min = max(xPos - radius, 0)
+        cdef int x_max = min(xPos + radius, width - 1)
+        cdef int y_min = max(yPos - radius, 0)
+        cdef int y_max = min(yPos + radius, height - 1)
+
+        # Top Row
+        toReturn += [discreteGridPosToID(x , y_min, width) for x in range(x_min, x_max + 1)]
+
+        # Middle Rows
+        for y in range(y_min + 1, y_max):
+            toReturn += [discreteGridPosToID(x_min, y, width), discreteGridPosToID(x_max, y, width)]
+
+        # Bottom Row
+        toReturn += [discreteGridPosToID(x, y_max, width) for x in range(x_min, x_max + 1)]
 
         return toReturn
 
@@ -273,9 +271,7 @@ cdef class CAgentResourceAcquisitionFunctions:
                                                                                      moisture_consumption_rate / crop_gestation_period)
         # Calculate Crop Yield
 
-        if not CSoilMoistureSystemFunctions.is_flooded(height_cells[patch_id], coords, sm_comp, ge_comp):
-            # Adjust soil moisture if cell not flooded
-            moisture_cells[patch_id] = moisture_remain
+        moisture_cells[patch_id] = moisture_remain
 
         crop_yield = farming_production_rate * wtr_penalty * tmp_penalty * slope_cells[patch_id] * (workers / farms_per_patch)
 

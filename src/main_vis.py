@@ -216,7 +216,6 @@ def log_file_to_list(file_path: str) -> [dict]:
                 vals = str.split(line[line.find(':')+1:])
                 iter_dict['temp'] = float(vals[0])
                 iter_dict['rainfall'] = float(vals[1])
-                iter_dict['flood'] = float(vals[2])
             elif keyword == 'HOUSEHOLD.FARM':
                 if 'HOUSEHOLD.FARM' not in iter_dict:
                     iter_dict['HOUSEHOLD.FARM'] = 0
@@ -635,18 +634,11 @@ if __name__ == '__main__':
 
     parser = parser.parse_args()
 
-    # im_path = './resources/Qena_Rescaled.png'
-    im_path = './resources/utility/scenario2/heightmap.png'
-
-    # im_path = './resources/faiyum_to_luxor_larger_image.png'
-
-    im = Image.open(im_path).convert('L')
-
     pixels = []
 
     for y in range(parser.height):
         for x in range(parser.width):
-            pixels.append(im.getpixel((x, y)) / 255.0)
+            pixels.append(0)
 
     #generate_settlement_plots(parser, pixels)
     #generate_log_plots(parser)
