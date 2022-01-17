@@ -459,9 +459,6 @@ def generate_household_plots(parser):
                             y_label='%', legend='center right')
 
 
-
-
-
 def generate_settlement_plots(parser, pixels):
     # Settlement Plots
     if not os.path.isdir(parser.path + '/settlement_plots'):

@@ -6,6 +6,7 @@ import statistics
 
 import numpy as np
 
+from math import ceil
 from Progress import progress
 
 
@@ -75,25 +76,16 @@ def get_composite_property_as_dict(snapshots: [[dict]], props: [str], comp_funcs
 
     return prop_dict
 
+def bin01(data: []):
 
-def in_delta(data : []):
+    counts = [0 for _ in range(10)]
 
-    total = 0
+    for val in data:
+        index = int(max(min(ceil(val * 10) - 1, 9), 0))
+        counts[index] += 1
 
-    for cell in data:
-        if cell[1][0] < 9751:
-            total += cell[0]
-    return total
+    return [p / float(len(data)) for p in counts]
 
-
-def out_delta(data : []):
-
-    total = 0
-
-    for cell in data:
-        if cell[1][0] > 9750:
-            total += cell[0]
-    return total
 
 
 def main():
@@ -121,46 +113,43 @@ def main():
 
     # File Format: agent_type/scenario/seed/resources+population
     for path in parser.paths:
-        print('Searching for Simulations in %s...' % path)
-        for agent_type in [d for d in os.listdir(path) if os.path.isdir(os.path.join(path, d))]:
-            print('Agent Type: %s:' % agent_type)
+        scenarios = [s for s in os.listdir(path) if os.path.isdir(os.path.join(path, s))]
+        print('\t- Found %s scenarios...' % len(scenarios))
+        for scenario in scenarios:
+            to_write = {}
+            print('\t- Scenario: %s' % scenario)
+            scenario_path = os.path.join(path, scenario)
 
-            agent_path = os.path.join(path, agent_type)
+            runs = [r for r in os.listdir(scenario_path) if os.path.isdir(os.path.join(scenario_path, r))]
+            run_len = len(runs)
+            print('\t\t- Found %s Simulation Runs...' % run_len)
+            for i in range(run_len):
+                progress(i, run_len)
+                to_write[runs[i]] = {}
+                # Get all agent json files in this simulation run
+                agent_snapshots = load_json_files(str(scenario_path) + '/' + runs[i] + '/agents')
 
-            scenarios = [s for s in os.listdir(agent_path) if os.path.isdir(os.path.join(agent_path, s))]
-            print('\t- Found %s scenarios...' % len(scenarios))
-            for scenario in scenarios:
-                to_write = {}
-                print('\t- Scenario: %s' % scenario)
-                scenario_path = os.path.join(agent_path, scenario)
+                to_write[runs[i]]['resources'] = get_composite_property_as_dict(agent_snapshots, ['wealth'],
+                                                                 [('mean', statistics.mean),
+                                                                  ('total', sum),
+                                                                  ('gini', gini)])
 
-                runs = [r for r in os.listdir(scenario_path) if os.path.isdir(os.path.join(scenario_path, r))]
-                run_len = len(runs)
-                print('\t\t- Found %s Simulation Runs...' % run_len)
-                for i in range(run_len):
-                    progress(i, run_len)
-                    to_write[runs[i]] = {}
-                    # Get all agent json files in this simulation run
-                    agent_snapshots = load_json_files(str(scenario_path) + '/' + runs[i] + '/settlements')
+                to_write[runs[i]]['population'] = get_composite_property_as_dict(agent_snapshots, ['population'],
+                                               [('number', len),
+                                                ('total', sum)])
 
-                    to_write[runs[i]]['resources'] = get_composite_property_as_dict(agent_snapshots, ['wealth'],
-                                                                     [('mean', statistics.mean),
-                                                                      ('total', sum),
-                                                                      ('gini', gini)])
+                to_write[runs[i]]['peer_transfer'] = get_composite_property_as_dict(agent_snapshots, ['peer_transfer'],
+                                                                                 [('mean', statistics.mean),
+                                                                                  ('dist', bin01)])
 
-                    to_write[runs[i]]['population'] = get_composite_property_as_dict(agent_snapshots, ['population'],
-                                                   [('mean', statistics.mean),
-                                                    ('total', sum)])
-
-                    to_write[runs[i]]['pop_dist'] = get_composite_property_as_dict(agent_snapshots, ['population', 'pos'],
-                                                                                     [('delta', in_delta),
-                                                                                      ('other', out_delta)])
-
-                    gc.collect()
-                print()
-                print('Writing data to output file:' + parser.output + '/processed_agents_' + agent_type + '_' + scenario + '.json:')
-                with open(parser.output + '/processed_agents_' + agent_type + '_' + scenario + '.json', 'w') as outfile:
-                    json.dump(to_write, outfile, indent=4)
+                to_write[runs[i]]['sub_transfer'] = get_composite_property_as_dict(agent_snapshots, ['sub_transfer'],
+                                                                                    [('mean', statistics.mean),
+                                                                                     ('dist', bin01)])
+                gc.collect()
+            print()
+            print('Writing data to output file:' + parser.output + '/processed_agents_' + scenario + '.json:')
+            with open(parser.output + '/processed_agents_' + scenario + '.json', 'w') as outfile:
+                json.dump(to_write, outfile, indent=4)
 
 
 if __name__ == '__main__':
