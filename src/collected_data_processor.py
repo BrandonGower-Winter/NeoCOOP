@@ -129,20 +129,20 @@ def main():
                 # Get all agent json files in this simulation run
                 agent_snapshots = load_json_files(str(scenario_path) + '/' + runs[i] + '/agents')
 
-                to_write[runs[i]]['resources'] = get_composite_property_as_dict(agent_snapshots, ['wealth'],
+                to_write[runs[i]]['resources'] = get_composite_property_as_dict(agent_snapshots, ['resources'],
                                                                  [('mean', statistics.mean),
                                                                   ('total', sum),
                                                                   ('gini', gini)])
 
-                to_write[runs[i]]['population'] = get_composite_property_as_dict(agent_snapshots, ['population'],
+                to_write[runs[i]]['population'] = get_composite_property_as_dict(agent_snapshots, ['occupants'],
                                                [('number', len),
                                                 ('total', sum)])
 
-                to_write[runs[i]]['peer_transfer'] = get_composite_property_as_dict(agent_snapshots, ['peer_transfer'],
+                to_write[runs[i]]['peer_transfer'] = get_composite_property_as_dict(agent_snapshots, ['peer_chance'],
                                                                                  [('mean', statistics.mean),
                                                                                   ('dist', bin01)])
 
-                to_write[runs[i]]['sub_transfer'] = get_composite_property_as_dict(agent_snapshots, ['sub_transfer'],
+                to_write[runs[i]]['sub_transfer'] = get_composite_property_as_dict(agent_snapshots, ['sub_chance'],
                                                                                     [('mean', statistics.mean),
                                                                                      ('dist', bin01)])
                 gc.collect()
