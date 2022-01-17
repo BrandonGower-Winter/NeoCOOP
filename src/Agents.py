@@ -1101,6 +1101,9 @@ class AgentPopulationSystem(System, IDecodable, ILoggable):
                 parents[parent_indices[4]][HouseholdPreferenceComponent].learning_rate,
                 sr_comp.get_learning_rate_std(sID))
 
+            if new_household[HouseholdPreferenceComponent].learning_rate < 0.01:
+                new_household[HouseholdPreferenceComponent].learning_rate = 0.01
+
             self.logger.info('MUTATE.HOUSEHOLD.STUBBORNESS: {}'.format(new_household.id))
 
         # Conformity
@@ -1110,6 +1113,9 @@ class AgentPopulationSystem(System, IDecodable, ILoggable):
             new_household[IEComponent].conformity = self.model.random.gauss(
                 parents[parent_indices[5]][IEComponent].conformity,
                 sr_comp.get_conformity_std(sID))
+
+            if new_household[IEComponent].conformity < 0.01:
+                new_household[IEComponent].conformity = 0.01
 
             self.logger.info('MUTATE.HOUSEHOLD.CONFORMITY: {}'.format(new_household.id))
 
