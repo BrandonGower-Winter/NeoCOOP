@@ -47,7 +47,7 @@ def write_plot(agent_types: [], filename, data, title: str, index: [int], x_axis
 
     for agent_type in agent_types:
         if len(index) > 1:
-            for i in index:
+            for i in range(len(index)):
                 ax.plot(iterations, data[agent_type][index[i]], label=data_types[agent_type][i])
         else:
             ax.plot(iterations, data[agent_type][index[0]], label=agent_type)
