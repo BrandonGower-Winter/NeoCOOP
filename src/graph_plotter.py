@@ -5,68 +5,52 @@ import numpy as np
 
 import os
 
-from CythonFunctions import CGlobalEnvironmentCurves
-
-
-def scenario_to_curve(scenario, i):
-
-    if i > 1000:
-        return 1.0
-
-    if scenario == 'scenario1':
-        return 1.0
-    elif scenario == 'scenario2':
-        return CGlobalEnvironmentCurves.linear_lerp(0., 1., i)
-    elif scenario == 'scenario3':
-        return CGlobalEnvironmentCurves.cosine_lerp(0., 1., i, 16)
-    else:
-        return CGlobalEnvironmentCurves.linear_modified_dsinusoidal_lerp(0., 1., i, 16, 1, 1)
-
 
 def get_scenario_data(runs: {}):
 
     placeholder = np.zeros((2000, len(runs)), dtype=float)
-    population_in_delta_placeholder = np.zeros((2000, len(runs)), dtype=float)
+    peer_placeholder = np.zeros((2000, len(runs)), dtype=float)
+    sub_placeholder = np.zeros((2000, len(runs)), dtype=float)
 
     index = 0
     for seed in runs:
         for i in range(len(runs[seed]['population']['total'])):
-            placeholder[i][index] = runs[seed]['population']['total'][i]
-            population_in_delta_placeholder[i][index] = runs[seed]['pop_dist']['delta'][i]
+            placeholder[i][index] = runs[seed]['population']['number'][i]
+            peer_placeholder[i][index] = runs[seed]['peer_transfer']['mean'][i]
+            sub_placeholder[i][index] = runs[seed]['sub_transfer']['mean'][i]
         index += 1
 
-    data = np.zeros((8, 2000), dtype=float)
+    data = np.zeros((6, 2000), dtype=float)
 
     for i in range(2000):
         data[0][i] = np.mean(placeholder[i])
         data[1][i] = np.std(placeholder[i])
-        data[2][i] = (data[1][i] / data[0][i]) * 100.0
-        lower, upper = data[0][i] - data[1][i],  data[0][i] + data[1][i]
-        data[3][i] = len([s for s in placeholder[i] if lower < s < upper]) / 50.0
-        data[4][i] = len([s for s in placeholder[i] if lower - data[1][i] < s < upper + data[1][i]]) / 50.0
 
-        # Resistance Metric
-        if i != 0:
-            data[5][i] = (data[0][i] - data[0][0]) / data[0][i] * 100.0
+        data[2][i] = np.mean(peer_placeholder[i])
+        data[3][i] = np.std(peer_placeholder[i])
 
-        data[6][i] = np.mean(population_in_delta_placeholder[i])
-        data[7][i] = data[0][i] - data[6][i]
+        data[4][i] = np.mean(sub_placeholder[i])
+        data[5][i] = np.std(sub_placeholder[i])
 
     return data
 
 
-def write_plot(agent_types: [], scenario, filename, data, title: str, index: int, x_axis: str, y_axis: str,
-               legend: str = 'lower right'):
+def write_plot(agent_types: [], filename, data, title: str, index: [int], x_axis: str, y_axis: str,
+               legend: str = 'lower right', show_std: int = -1, data_types={}):
 
     fig, ax = pyplot.subplots()
     ax.set_title(title)
     ax.set_xlabel(x_axis)
     ax.set_ylabel(y_axis)
 
-    iterations = np.arange(2000)
+    iterations = np.arange(2000) * 5
 
     for agent_type in agent_types:
-        ax.plot(iterations, data[agent_type][index], label=agent_type)
+        if len(index) > 1:
+            for i in index:
+                ax.plot(iterations, data[agent_type][index[i]], label=data_types[agent_type][i])
+        else:
+            ax.plot(iterations, data[agent_type][index[0]], label=agent_type)
 
     ax.legend(loc=legend)
     ax.set_aspect('auto')
@@ -97,31 +81,25 @@ def main():
             with open(os.path.join(root, agent_type)) as json_file:
                 data[agent_type[0:-5]] = get_scenario_data(json.load(json_file))
 
-    write_plot([a for a in data], parser.scenario, '%s/population' % parser.output, data,
-               'Total Population of Agent Types for %s averaged over 50 simulation runs.' % parser.scenario,
-               0, 'iterations', 'Population')
-    write_plot([a for a in data], parser.scenario, '%s/SD' % parser.output, data,
-               'SD of Population of Agent Types for %s averaged over 50 simulation runs.' % parser.scenario,
-               1, 'iterations', 'SD')
-    write_plot([a for a in data], parser.scenario, '%s/RSD' % parser.output, data,
-               'RSD of Population of Agent Types for %s averaged over 50 simulation runs.' % parser.scenario,
-               2, 'iterations', 'RSD(%)')
-    write_plot([a for a in data], parser.scenario, '%s/onestd' % parser.output, data,
-               '%s of simulation runs within 1 STD of the mean\nfor %s averaged over 50 simulation runs.' % ('%', parser.scenario),
-               3, 'iterations', '%')
-    write_plot([a for a in data], parser.scenario, '%s/twostd' % parser.output, data,
-               '%s of simulation runs within 2 STD of the mean\nfor %s averaged over 50 simulation runs.' % ('%', parser.scenario),
-               4, 'iterations', '%')
-    write_plot([a for a in data], parser.scenario, '%s/resistance' % parser.output, data,
-               'Relative Resistance of population \nfor %s averaged over 50 simulation runs.' % parser.scenario,
-               5, 'iterations', '%')
+    data_types = {}
 
-    write_plot([a for a in data], parser.scenario, '%s/delta_pop' % parser.output, data,
-               'Total Population of Agent Types within the Delta \nfor %s averaged over 50 simulation runs.' % parser.scenario,
-               6, 'iterations', 'Population')
-    write_plot([a for a in data], parser.scenario, '%s/out_delta_pop' % parser.output, data,
-               'Total Population of Agent Types outside the Delta \nfor %s averaged over 50 simulation runs.' % parser.scenario,
-               7, 'iterations', 'Population')
+    for a in data:
+        data_types[a] = ['Peer', 'Sub']
+
+    write_plot(['R-HIGH', 'F-HIGH', 'A-HIGH', 'S-HIGH'], '%s/HIGH_population' % parser.output, data,
+               'Total Population of Initial Peer / Sub Distributions for \nHIGH Frequency Environmental Stress Scenarios.',
+               [0], 'Iteration', 'Population')
+    write_plot(['R-LOW', 'F-LOW', 'A-LOW', 'S-LOW'], '%s/LOW_population' % parser.output, data,
+               'Total Population of Initial Peer / Sub Distributions for \nLOW Frequency Environmental Stress Scenarios.',
+               [0], 'Iteration', 'Population')
+    write_plot(['R-UNIFORM', 'F-UNIFORM', 'A-UNIFORM', 'S-UNIFORM'], '%s/UNIFORM_population' % parser.output, data,
+               'Total Population of Initial Peer / Sub Distributions for \nUNIFORM Environmental Stress Scenarios.',
+               [0], 'Iteration', 'Population')
+
+    for a in data:
+        write_plot([a], '%s/%s_transfer_chance' % (parser.output, a), data,
+                                                                'Peer and Sub Transfer Properties for %s Scenario' % a,
+                                                          [2, 4], 'Iteration', 'Probability (%)', data_types=data_types)
 
 
 if __name__ == '__main__':

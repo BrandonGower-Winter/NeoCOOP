@@ -6,7 +6,7 @@ import statistics
 
 import numpy as np
 
-from math import ceil
+from math import ceil, isinf, isnan
 from Progress import progress
 
 
@@ -76,16 +76,15 @@ def get_composite_property_as_dict(snapshots: [[dict]], props: [str], comp_funcs
 
     return prop_dict
 
+
 def bin01(data: []):
-
     counts = [0 for _ in range(10)]
-
     for val in data:
-        index = int(max(min(ceil(val * 10) - 1, 9), 0))
+        clamp_val = 0.005 if isinf(val) or isnan(val) else val
+        index = int(max(min(ceil(clamp_val * 10) - 1, 9), 0))
         counts[index] += 1
 
     return [p / float(len(data)) for p in counts]
-
 
 
 def main():
