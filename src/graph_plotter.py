@@ -48,9 +48,17 @@ def write_plot(agent_types: [], filename, data, title: str, index: [int], x_axis
     for agent_type in agent_types:
         if len(index) > 1:
             for i in range(len(index)):
-                ax.plot(iterations, data[agent_type][index[i]], label=data_types[agent_type][i])
+                p = ax.plot(iterations, data[agent_type][index[i]], label=data_types[agent_type][i])
+                if show_std > -1:
+                    ax.fill_between(iterations, data[agent_type][index[i]] - data[agent_type][index[i] + show_std],
+                                    data[agent_type][index[i]] + data[agent_type][index[i] + show_std],
+                                    color=p.get_color(), alpha=.1)
         else:
-            ax.plot(iterations, data[agent_type][index[0]], label=agent_type)
+            p = ax.plot(iterations, data[agent_type][index[0]], label=agent_type)
+            if show_std > -1:
+                ax.fill_between(iterations, data[agent_type][index[0]] - data[agent_type][index[0] + show_std],
+                                data[agent_type][index[0]] + data[agent_type][index[0] + show_std],
+                                color=p.get_color(), alpha=.1)
 
     ax.legend(loc=legend)
     ax.set_aspect('auto')
@@ -98,8 +106,9 @@ def main():
 
     for a in data:
         write_plot([a], '%s/%s_transfer_chance' % (parser.output, a), data,
-                                                                'Peer and Sub Transfer Properties for %s Scenario' % a,
-                                                          [2, 4], 'Iteration', 'Probability (%)', data_types=data_types)
+                                                                'Peer and Sub Transfer Properties for Scenario %s' % a,
+                                                          [2, 4], 'Iteration', 'Probability (%)', data_types=data_types,
+                                                            show_std=1)
 
 
 if __name__ == '__main__':
