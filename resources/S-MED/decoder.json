@@ -39,7 +39,7 @@
         },
         "rainfall_dict": {
           "id": "cosine",
-          "frequency": 64,
+          "frequency": 16,
           "k": 1,
           "m": 1
         }
