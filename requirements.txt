@@ -1,7 +1,8 @@
 Cython
 matplotlib
 pandas
-dash
+scipy
+scikit-posthocs
 ECAgent
 Pillow
 argparse
