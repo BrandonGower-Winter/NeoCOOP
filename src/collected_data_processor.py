@@ -10,7 +10,9 @@ from math import ceil, isinf, isnan
 from Progress import progress
 
 
-def gini(x):
+def gini(data):
+
+    x = [val[0] + val[1] for val in data]
 
     # Mean Absolute Difference
     mad = np.abs(np.subtract.outer(x, x)).mean()
@@ -57,6 +59,30 @@ def generate_composite_val(props: [str], snapshot: dict, comp_func, sort: bool =
     return comp_func(ls)
 
 
+def log_file_to_list(file_path: str) -> [dict]:
+
+    log_list = []
+
+    with open(file_path, 'r') as log_file:
+        iter_dict = {}
+
+        for line in log_file.readlines():
+            keyword = line[:line.find(':')]
+            if keyword == 'ITERATION':
+                log_list.append(iter_dict)
+                iter_dict = {}
+            elif keyword == 'GES':
+                vals = str.split(line[line.find(':')+1:])
+                iter_dict['temp'] = float(vals[0])
+                iter_dict['rainfall'] = float(vals[1])
+            elif keyword in iter_dict:
+                iter_dict[keyword] += 1
+            else:
+                iter_dict[keyword] = 1
+
+    return log_list
+
+
 def get_composite_property_as_dict(snapshots: [[dict]], props: [str], comp_funcs: [(str, any)],
                                    over_range: (int, int) = (0, -1), sort: bool = False) -> dict:
 
@@ -76,16 +102,24 @@ def get_composite_property_as_dict(snapshots: [[dict]], props: [str], comp_funcs
 
     return prop_dict
 
-
 def bin01(data: []):
+
     counts = [0 for _ in range(10)]
+
     for val in data:
-        clamp_val = 0.005 if isinf(val) or isnan(val) else val
-        index = int(max(min(ceil(clamp_val * 10) - 1, 9), 0))
+        clamp_val = 0.005 if isinf(val)  or isnan(val) else val
+        index = int(max(min(ceil(clamp_val * 10.0) - 1.0, 9.0), 0.0))
         counts[index] += 1
 
     return [p / float(len(data)) for p in counts]
 
+def unq(data: []):
+    unqs = []
+    for val in data:
+        if val not in unqs:
+            unqs.append(val)
+
+    return len(unqs)
 
 def main():
 
@@ -97,7 +131,7 @@ def main():
     parser.add_argument('-o', '--output', help='The path to write all of the processed data to.',
                         required=True)
     parser.add_argument('-v', '--verbose', help='Will print out informative information to the terminal.',
-                    action='store_true')
+                        action='store_true')
 
     parser = parser.parse_args()
 
@@ -127,23 +161,46 @@ def main():
                 to_write[runs[i]] = {}
                 # Get all agent json files in this simulation run
                 agent_snapshots = load_json_files(str(scenario_path) + '/' + runs[i] + '/agents')
+                log_file = log_file_to_list(str(scenario_path) + '/' + runs[i] + '/events.log')
 
                 to_write[runs[i]]['resources'] = get_composite_property_as_dict(agent_snapshots, ['resources'],
-                                                                 [('mean', statistics.mean),
-                                                                  ('total', sum),
-                                                                  ('gini', gini)])
+                                                                                [('mean', statistics.mean),
+                                                                                 ('total', sum)])
+
+                to_write[runs[i]]['gini'] = get_composite_property_as_dict(agent_snapshots, ['resources', 'load'],
+                                                                                [('gini', gini)])
 
                 to_write[runs[i]]['population'] = get_composite_property_as_dict(agent_snapshots, ['occupants'],
-                                               [('number', len),
-                                                ('total', sum)])
+                                                                                 [('number', len),
+                                                                                  ('total', sum)])
 
                 to_write[runs[i]]['peer_transfer'] = get_composite_property_as_dict(agent_snapshots, ['peer_chance'],
-                                                                                 [('mean', statistics.mean),
-                                                                                  ('dist', bin01)])
-
-                to_write[runs[i]]['sub_transfer'] = get_composite_property_as_dict(agent_snapshots, ['sub_chance'],
                                                                                     [('mean', statistics.mean),
                                                                                      ('dist', bin01)])
+
+                to_write[runs[i]]['sub_transfer'] = get_composite_property_as_dict(agent_snapshots, ['sub_chance'],
+                                                                                   [('mean', statistics.mean),
+                                                                                    ('dist', bin01)])
+                to_write[runs[i]]['settlements'] = get_composite_property_as_dict(agent_snapshots, ['settlement_id'],
+                                                                                  [('count', unq)])
+
+                to_write[runs[i]]['logs'] = {
+                    'AUTH': [
+                        (x['HOUSEHOLD.RESOURCES.TRANSFER.SUCCESS.AUTH'] if 'HOUSEHOLD.RESOURCES.TRANSFER.SUCCESS.AUTH' in x else 0)
+                        + (x['HOUSEHOLD.RESOURCES.TRANSFER.FAIL.AUTH'] if 'HOUSEHOLD.RESOURCES.TRANSFER.FAIL.AUTH' in x else 0)
+                        for x in log_file],
+                    'PEER': [
+                        (x['HOUSEHOLD.RESOURCES.TRANSFER.SUCCESS.PEER'] if 'HOUSEHOLD.RESOURCES.TRANSFER.SUCCESS.PEER' in x else 0)
+                        + (x['HOUSEHOLD.RESOURCES.TRANSFER.FAIL.PEER'] if 'HOUSEHOLD.RESOURCES.TRANSFER.FAIL.PEER' in x else 0)
+                        + (x['HOUSEHOLD.RESOURCES.TRANSFER.REJECT.PEER'] if 'HOUSEHOLD.RESOURCES.TRANSFER.REJECT.PEER' in x else 0)
+                        for x in log_file],
+                    'SUB': [
+                        (x['HOUSEHOLD.RESOURCES.TRANSFER.SUCCESS.SUB'] if 'HOUSEHOLD.RESOURCES.TRANSFER.SUCCESS.SUB' in x else 0)
+                        + (x['HOUSEHOLD.RESOURCES.TRANSFER.FAIL.SUB'] if 'HOUSEHOLD.RESOURCES.TRANSFER.FAIL.SUB' in x else 0)
+                        + (x['HOUSEHOLD.RESOURCES.TRANSFER.REJECT.SUB'] if 'HOUSEHOLD.RESOURCES.TRANSFER.REJECT.SUB' in x else 0)
+                        for x in log_file]
+                }
+
                 gc.collect()
             print()
             print('Writing data to output file:' + parser.output + '/processed_agents_' + scenario + '.json:')
