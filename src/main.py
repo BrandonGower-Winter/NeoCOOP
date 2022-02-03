@@ -16,7 +16,7 @@ from Progress import progress
 
 # Default Decoder file path
 default_path = './resources/traditional/scenario3/'
-store_path = 'EgyptModel'
+store_path = 'base'
 
 
 class GECCOModel(Model, IDecodable, ILoggable):
