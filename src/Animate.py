@@ -2,6 +2,10 @@ import animatplot as amp
 import matplotlib.pyplot as plt
 import numpy as np
 
+import matplotlib
+matplotlib.rcParams['pdf.fonttype'] = 42
+matplotlib.rcParams['ps.fonttype'] = 42
+
 
 def generateAnimat(title: str, records: [[float]], fps: int = 1, vmin=0, vmax=255, filename: str = 'animat',
                    x_label: str = 'X', y_label: str = 'Y'):
@@ -15,7 +19,7 @@ def generateAnimat(title: str, records: [[float]], fps: int = 1, vmin=0, vmax=25
         ax.set_ylabel(y_label)
 
         # Generate the pix map
-        plot = ax.imshow(records[i], interpolation='none', cmap='jet', vmin=vmin, vmax=vmax)
+        plot = ax.imshow(records[i], interpolation='none', cmap='Greys', vmin=vmin, vmax=vmax)
 
     blocks = amp.blocks.Nuke(animate, length=len(records), ax=ax)  # Required call to build our animation
     timeline = np.arange(len(records))

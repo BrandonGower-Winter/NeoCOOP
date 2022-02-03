@@ -283,9 +283,9 @@ def land_possesion(df : pandas.DataFrame, **kwargs):
         if df['isSettlement'][i] != -1:
             land.append(2)
         elif df['isOwned'][i] != -1:
-            land.append(3)
+            land.append(1)
         else:
-            land.append(kwargs['pixels'][i])
+            land.append(0)
 
     df['land_ownership'] = land
 
@@ -533,8 +533,8 @@ def generate_environment_plots(parser, pixels):
     environment_snapshots = load_csvs(parser.path + '/environment')
 
     create_composite_property_as_panda(environment_snapshots, land_possesion, {'pixels': pixels})
-    pandas_to_animat('Animation of `Settlements` over 2000 years', parser.width, parser.height, environment_snapshots, 'land_ownership',
-                     parser.path + '/environment_plots/land_ownership_animat', 100, vmin=0, vmax=3)
+    pandas_to_animat('NeoCOOP Visual Representation', parser.width, parser.height, environment_snapshots, 'land_ownership',
+                     parser.path + '/environment_plots/land_ownership_animat', 100, vmin=0, vmax=2)
     pandas_to_animat('Animation of `Vegetation` over 1000 years', parser.width, parser.height, environment_snapshots,
                      'vegetation',
                      parser.path + '/environment_plots/vegetation_animat', 10, vmin=0, vmax=10500)
@@ -637,9 +637,9 @@ if __name__ == '__main__':
         for x in range(parser.width):
             pixels.append(0)
 
-    #generate_settlement_plots(parser, pixels)
-    #generate_log_plots(parser)
-    #generate_environment_plots(parser, pixels)
+    generate_settlement_plots(parser, pixels)
+    generate_log_plots(parser)
+    generate_environment_plots(parser, pixels)
     generate_household_plots(parser)
 
     #other_stuff()
