@@ -1,9 +1,9 @@
 import statistics
 
-import VegetationModel
 import math
 import numpy as np
 import json
+import time
 
 from ECAgent.Core import *
 from ECAgent.Decode import IDecodable
@@ -44,7 +44,6 @@ class ResourceComponent(Component):
         self.satisfaction = 0.0
         self.ownedLand = []
         self.a_workers = 0
-        self.lookback_sids = []
 
     def add_occupant(self, id, age: int = 0):
         self.occupants[id] = Individual(id, age)
@@ -100,6 +99,8 @@ class HouseholdRelationshipComponent(Component):
         # Randomize the resource trading personalities
         self.peer_resource_transfer_chance = self.model.random.random()
         self.sub_resource_transfer_chance = self.model.random.random()
+
+        self.lookback_sids = []
 
     def is_aquaintance(self, h):
         """Returns true if household h is in the same settlement as household h"""
@@ -397,6 +398,9 @@ class SettlementRelationshipComponent(Component):
         return sum([self.model.environment.getAgent(h).social_status() for h in
                     self.settlements[settlementID].occupants])
 
+    def getAverageSettlementSocialStatus(self, settlementID):
+        return self.getSettlementSocialStatus(settlementID) / len(self.settlements[settlementID].occupants)
+
     def getSettlementPopulation(self, settlementID):
         return sum([len(self.model.environment.getAgent(h)[ResourceComponent].occupants) for h in
                     self.settlements[settlementID].occupants])
@@ -601,18 +605,12 @@ class AgentResourceAcquisitionSystem(System, IDecodable, ILoggable):
             else:  # If there is no land available, break
                 break
 
-        moist_cells = self.model.environment.cells['moisture']
-
-        def getMoisture(loc):
-            return moist_cells[loc]
-
-        # Sort farm by moisture levels
-        available_land.sort(key=getMoisture)
-
         toClaim = []
         # Remove least promising land patches
         while new_land > len(toClaim) and len(available_land) > 0:
-            toClaim.append(available_land.pop())
+            choice = self.model.random.choice(available_land)
+            toClaim.append(choice)
+            available_land.remove(choice)
 
         for land_id in toClaim:
             household[ResourceComponent].claim_land(land_id)
@@ -624,6 +622,9 @@ class AgentResourceAcquisitionSystem(System, IDecodable, ILoggable):
         return neighbour_count
 
     def execute(self):
+
+        start_time = time.time()
+
         # Instantiate numpy arrays of environment dataframe
 
         owned_cells = self.model.environment.cells['isOwned'].to_numpy()
@@ -747,6 +748,7 @@ class AgentResourceAcquisitionSystem(System, IDecodable, ILoggable):
                                              'isOwned': owned_cells})
         # Log Events
         self.logger.info(log_string)
+        self.logger.info('SYS.TIME: {} {}\n'.format(self.id, time.time() - start_time))
 
     @staticmethod
     def adjust_farm_preference(household: PreferenceHousehold, acquired_resources, farm_res_avg, forage_res_avg):
@@ -777,7 +779,7 @@ class AgentResourceTransferSystem(System, IDecodable, ILoggable):
         return AgentResourceTransferSystem(params['id'], params['model'], params['priority'], params['load_decay'])
 
     def execute(self):
-
+        start_time = time.time()
         log_string = ''
 
         # Decay Load
@@ -873,6 +875,7 @@ class AgentResourceTransferSystem(System, IDecodable, ILoggable):
                             resources_needed -= resource_given
 
         self.logger.info(log_string)
+        self.logger.info('SYS.TIME: {} {}\n'.format(self.id, time.time() - start_time))
 
     @staticmethod
     def ask_for_resources(h: Household, amount: int) -> int:
@@ -927,16 +930,21 @@ class AgentResourceConsumptionSystem(System, IDecodable, ILoggable):
         return req_res * hunger
 
     def execute(self):
+        start_time = time.time()
         to_log = ''
         for stats in [(a.id, CAgentResourceConsumptionSystemFunctions.ARCProcess(a[ResourceComponent]))
                       for a in self.model.environment.getAgents()]:
             to_log += 'HOUSEHOLD.CONSUME: {} {}\n'.format(stats[0], stats[1])
 
         self.logger.info(to_log)
+        self.logger.info('SYS.TIME: {} {}\n'.format(self.id, time.time() - start_time))
 
 
 class AgentPopulationSystem(System, IDecodable, ILoggable):
     """This system is responsible for managing agent reproduction, death and aging"""
+
+    max_lookback_length = 3
+
     def __init__(self, id: str, model: Model, priority, birth_rate, death_rate, yrs_per_move, num_settlements,
                  cell_capacity):
         System.__init__(self, id, model, priority=priority)
@@ -950,7 +958,7 @@ class AgentPopulationSystem(System, IDecodable, ILoggable):
                                                                             cell_capacity))
 
         self.settlement_move_locs = {}
-        self.neighbouring_settlement_values = {}
+        self.neighbouring_settlements = {}
 
         self.num_households = 0
 
@@ -1128,11 +1136,11 @@ class AgentPopulationSystem(System, IDecodable, ILoggable):
             SettlementRelationshipComponent].settlements[sID].pos[-1]))
 
     def execute(self):
-
+        start_time = time.time()
         log_string = ''
 
         self.settlement_move_locs = {}
-        self.neighbouring_settlement_values = {}
+        self.neighbouring_settlements = {}
 
         toRem = []
         for household in self.model.environment.getAgents():
@@ -1190,6 +1198,7 @@ class AgentPopulationSystem(System, IDecodable, ILoggable):
                 log_string += 'REMOVE.HOUSEHOLD.EMPTY: {}\n'.format(household.id)
 
         self.logger.info(log_string)
+        self.logger.info('SYS.TIME: {} {}\n'.format(self.id, time.time() - start_time))
 
     def reallocate_agent(self, household: Household):
         # Get rid of all land ownership that household has
@@ -1197,34 +1206,42 @@ class AgentPopulationSystem(System, IDecodable, ILoggable):
         household[ResourceComponent].ownedLand.clear()
 
         old_sid = household[HouseholdRelationshipComponent].settlementID
+
         if old_sid != -1:
             self.model.environment[SettlementRelationshipComponent].remove_household(household)
+
+        # Add old settlement to agent's lookback memory
+        household[HouseholdRelationshipComponent].lookback_sids.append(old_sid)
+
+        # If agent's lookback memory has reached capacity, pop the oldest memory off the list
+        if len(household[HouseholdRelationshipComponent].lookback_sids) > AgentPopulationSystem.max_lookback_length:
+            household[HouseholdRelationshipComponent].lookback_sids.pop(0)
 
         if old_sid not in self.model.environment[SettlementRelationshipComponent].settlements:
             self.logger.info('REMOVE.SETTLEMENT.ABANDONED: {}'.format(old_sid))
 
-        # Check for settlement with most wealth
-        if old_sid not in self.neighbouring_settlement_values:
-            wealthComp = -1.0
+        if old_sid not in self.neighbouring_settlements:
+            self.neighbouring_settlements[old_sid] = []
             for settlement in [self.model.environment[SettlementRelationshipComponent].settlements[s] for s in
-                               self.model.environment[SettlementRelationshipComponent].settlements
-                               if s != old_sid]:
-
-                # Ensure household can travel to the settlement before evaluating it
+                           self.model.environment[SettlementRelationshipComponent].settlements]:
                 dist = (household[PositionComponent].x - self.model.environment.cells['pos'][settlement.pos[0]][0]) ** 2 \
-                       + (household[PositionComponent].y - self.model.environment.cells['pos'][settlement.pos[0]][1]) ** 2
+                       + (household[PositionComponent].y - self.model.environment.cells['pos'][settlement.pos[0]][
+                    1]) ** 2
 
-                if dist > ResourceComponent.vision_square:
-                    continue
+                if dist < ResourceComponent.vision_square:
+                    self.neighbouring_settlements[old_sid].append(settlement)
 
-                avgWealth = self.model.environment[SettlementRelationshipComponent].getAverageSettlementWealth(settlement.id)
-                if avgWealth > wealthComp:
-                    wealthComp = avgWealth
-                    self.neighbouring_settlement_values[old_sid] = settlement.id
+        # Check for settlement with most wealth (ignoring lookback sids)
+        mostWealth = 0
+        most_id = -1
+        for settlement in [s for s in self.neighbouring_settlements[old_sid]
+                           if s.id not in household[HouseholdRelationshipComponent].lookback_sids
+                           and s.id in self.model.environment[SettlementRelationshipComponent].settlements]:
 
-        most_id = self.neighbouring_settlement_values[old_sid] if old_sid in self.neighbouring_settlement_values else -1
-        mostWealth = self.model.environment[SettlementRelationshipComponent].getAverageSettlementWealth(most_id) if most_id != -1 \
-                                                                                                                    and most_id in self.model.environment[SettlementRelationshipComponent].settlements else 0
+            avgWealth = self.model.environment[SettlementRelationshipComponent].getAverageSettlementSocialStatus(settlement.id)
+            if avgWealth > mostWealth:
+                mostWealth = avgWealth
+                most_id = settlement.id
 
         if mostWealth >= household[ResourceComponent].required_resources():
             # Move to this settlement
@@ -1237,48 +1254,52 @@ class AgentPopulationSystem(System, IDecodable, ILoggable):
                                                                              self.model.environment[SettlementRelationshipComponent].settlements[most_id].pos[-1]))
 
         else:
-            # Assign new household position if it chooses to not move to an existing settlement
+            # Assign new household position if agent chooses to not move to an existing settlement
+            # This checks to see if someone else from the settlement has moved and, if so, the household follows them,
+            # else a new settlement may be created. This creates grouped migration.
             if old_sid not in self.settlement_move_locs:
 
-                hPos = (household[PositionComponent].x, household[PositionComponent].y)
-                self.settlement_move_locs[old_sid] = [x for x in self.model.environment.getNeighbours(hPos,
-                                                                                                      radius=int(ResourceComponent.vision_square ** .5))
-                                                      if self.model.environment.cells['isOwned'][x] == -1
-                                                      and self.model.environment.cells['isSettlement'][x] == -1]
+                # First check to see if household moves a one of the newly created settlements,
+                valid_new_settlements = []
+                for settlement in [self.model.environment[SettlementRelationshipComponent].settlements[s]
+                                   for s in self.model.environment[SettlementRelationshipComponent].settlements]:
+                    dist = (household[PositionComponent].x - self.model.environment.cells['pos'][settlement.pos[0]][
+                        0]) ** 2 \
+                           + (household[PositionComponent].y - self.model.environment.cells['pos'][settlement.pos[0]][
+                        1]) ** 2
 
-                vegetation_cells = self.model.environment.cells['vegetation']
+                    if dist < ResourceComponent.vision_square:
+                        valid_new_settlements.append(settlement)
 
-                def getVegetation(loc):
-                    return vegetation_cells[loc]
+                if len(valid_new_settlements) > 0 and self.model.random.random() > 1.0 / len(valid_new_settlements):
+                    # Choose one of the new settlements
+                    self.settlement_move_locs[old_sid] = self.model.random.choice(valid_new_settlements).pos[0]
+                else:
+                    # Choose to create a new settlement
+                    hPos = (household[PositionComponent].x, household[PositionComponent].y)
+                    possible_locs = [x for x in self.model.environment.getNeighbours(hPos,
+                                                          radius=int(ResourceComponent.vision_square ** .5))
+                                                          if self.model.environment.cells['isOwned'][x] == -1
+                                                          and self.model.environment.cells['isSettlement'][x] == -1]
 
-                self.settlement_move_locs[old_sid].sort(key=getVegetation)
+                    self.settlement_move_locs[old_sid] = self.model.random.choice(possible_locs)
 
-            while True:
-                new_unq_id = self.settlement_move_locs[old_sid].pop()
-                if self.model.environment.cells['isOwned'][new_unq_id] == -1 and self.model.environment.cells[
-                    'isSettlement'][new_unq_id] == -1:
-                    break
+                    new_unq_id = self.settlement_move_locs[old_sid]
 
-            new_x, new_y = self.model.environment.cells['pos'][new_unq_id]
-
-            # Create a new Settlement
-            sttlID = self.model.environment.getComponent(SettlementRelationshipComponent).create_settlement()
-            self.model.environment[SettlementRelationshipComponent].settlements[sttlID].pos.append(new_unq_id)
-            self.logger.info('CREATE.SETTLEMENT: {} {}'.format(sttlID, new_unq_id))
-
-            self.model.environment.cells.at[new_unq_id, 'isSettlement'] = sttlID
+                    # Create a new Settlement
+                    sttlID = self.model.environment.getComponent(SettlementRelationshipComponent).create_settlement()
+                    self.model.environment[SettlementRelationshipComponent].settlements[sttlID].pos.append(new_unq_id)
+                    self.logger.info('CREATE.SETTLEMENT: {} {}'.format(sttlID, new_unq_id))
+                    self.model.environment.cells.at[new_unq_id, 'isSettlement'] = sttlID
 
             # Move House and add it to settlement
+            new_x, new_y = self.model.environment.cells['pos'][self.settlement_move_locs[old_sid]]
+            # Must cast to int() to make it a python object so that it can be JSON serialized
+            sttlID = int(self.model.environment.cells['isSettlement'][self.settlement_move_locs[old_sid]])
             household[PositionComponent].x = new_x
             household[PositionComponent].y = new_y
             self.model.environment.getComponent(SettlementRelationshipComponent).add_household_to_settlement(household, sttlID)
-
-            self.logger.info('HOUSEHOLD.MOVE.RANDOM: {} {} {} {}'.format(household.id, old_sid, sttlID, new_unq_id))
-
-        res_comp = household[ResourceComponent]
-        res_comp.lookback_sids.append(household[HouseholdRelationshipComponent].settlementID)
-        if len(res_comp.lookback_sids) > ResourceComponent.move_lookback:
-            res_comp.lookback_sids.pop(0)
+            self.logger.info('HOUSEHOLD.MOVE.RANDOM: {} {} {} {}'.format(household.id, old_sid, sttlID, self.settlement_move_locs[old_sid]))
 
     def determine_parent(self, sID, new_household: IEHousehold):
 
@@ -1287,7 +1308,6 @@ class AgentPopulationSystem(System, IDecodable, ILoggable):
             SettlementRelationshipComponent].settlements[sID].occupants
                       if self.model.environment.getAgent(h).social_status != 0.0
                       and self.model.environment.getAgent(h) != new_household]
-
 
         # Get all Settlements using Xtent
         sr_comp = self.model.environment[SettlementRelationshipComponent]
@@ -1397,7 +1417,7 @@ class AgentIEAdaptationSystem(System, IDecodable, ILoggable):
         self.belief_spaces = {}
 
     def execute(self):
-
+        start_time = time.time()
         log_string = ''
 
         belief_spaces = {}
@@ -1454,6 +1474,7 @@ class AgentIEAdaptationSystem(System, IDecodable, ILoggable):
 
         self.belief_spaces = belief_spaces
         self.logger.info(log_string)
+        self.logger.info('SYS.TIME: {} {}\n'.format(self.id, time.time() - start_time))
 
     @staticmethod
     def influence_agent(agent: IEHousehold, bs: BeliefSpace):
