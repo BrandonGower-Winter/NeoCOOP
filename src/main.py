@@ -198,7 +198,7 @@ def init_settlements(params : dict):
     for agent in model.environment.getAgents():
 
         if params['strategy'] == 'grouped':
-            s = model.environment[SettlementRelationshipComponent].settlements[agent.id % 4]
+            s = model.environment[SettlementRelationshipComponent].settlements[agent.id % 20]
             agent[HouseholdRelationshipComponent].peer_resource_transfer_chance = model.random.uniform(
                 params['adjust_ranges'][s.id % 4][0], params['adjust_ranges'][s.id % 4][1])
             agent[HouseholdRelationshipComponent].sub_resource_transfer_chance = model.random.uniform(

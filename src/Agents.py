@@ -649,6 +649,11 @@ class AgentResourceAcquisitionSystem(System, IDecodable, ILoggable):
         settlement_forage_land = {}
         settlement_neighbour_count = {}
 
+        is_land_available = True
+        if len(self.model.environment.getAgents()) > 0.9 * (self.model.environment.width * self.model.environment.height):
+            is_land_available = len([0 for x in range(len(owned_cells)) if owned_cells[x] == -1
+                                     and settlement_cells[x] == -1]) > 0
+
         log_string = ''
 
         def getVegetation(location):  # Function used to sort land patches by vegetation density.
@@ -673,7 +678,8 @@ class AgentResourceAcquisitionSystem(System, IDecodable, ILoggable):
 
             # If ownedLand < patches to farm allocate more land to farm
             if len(household[ResourceComponent].ownedLand) < numToFarm * AgentResourceAcquisitionSystem.land_buffer:
-                settlement_neighbour_count[sID] = self.acquire_land(household, numToFarm,
+                if is_land_available:
+                    settlement_neighbour_count[sID] = self.acquire_land(household, numToFarm,
                                                                     settlement_neighbour_count[sID] if sID in settlement_neighbour_count else 1)
 
                 if len(household[ResourceComponent].ownedLand) < numToFarm:
@@ -717,7 +723,7 @@ class AgentResourceAcquisitionSystem(System, IDecodable, ILoggable):
 
             # Forage numToForage Cells
             totalForage = 0
-            if numToForage > 0:
+            if numToForage > 0 and is_land_available:
                 if sID not in settlement_forage_land:
                     settlement_forage_land[sID] = CAgentResourceAcquisitionFunctions.generateNeighbours(hPos[0], hPos[1],
                                                                                                         self.model.environment.width, self.model.environment.height,
@@ -990,6 +996,7 @@ class AgentPopulationSystem(System, IDecodable, ILoggable):
 
         self.settlement_move_locs = {}
         self.neighbouring_settlements = {}
+        self.new_settlements = []
 
         self.num_households = 0
 
@@ -1172,6 +1179,7 @@ class AgentPopulationSystem(System, IDecodable, ILoggable):
 
         self.settlement_move_locs = {}
         self.neighbouring_settlements = {}
+        self.new_settlements.clear()
 
         toRem = []
         for household in self.model.environment.getAgents():
@@ -1293,7 +1301,7 @@ class AgentPopulationSystem(System, IDecodable, ILoggable):
                 # First check to see if household moves a one of the newly created settlements,
                 valid_new_settlements = []
                 for settlement in [self.model.environment[SettlementRelationshipComponent].settlements[s]
-                                   for s in self.model.environment[SettlementRelationshipComponent].settlements]:
+                                   for s in self.new_settlements]:
                     dist = (household[PositionComponent].x - self.model.environment.cells['pos'][settlement.pos[0]][
                         0]) ** 2 \
                            + (household[PositionComponent].y - self.model.environment.cells['pos'][settlement.pos[0]][
@@ -1313,15 +1321,21 @@ class AgentPopulationSystem(System, IDecodable, ILoggable):
                                                           if self.model.environment.cells['isOwned'][x] == -1
                                                           and self.model.environment.cells['isSettlement'][x] == -1]
 
-                    self.settlement_move_locs[old_sid] = self.model.random.choice(possible_locs)
+                    if len(possible_locs) > 0:
+                        self.settlement_move_locs[old_sid] = self.model.random.choice(possible_locs)
+                        new_unq_id = self.settlement_move_locs[old_sid]
 
-                    new_unq_id = self.settlement_move_locs[old_sid]
-
-                    # Create a new Settlement
-                    sttlID = self.model.environment.getComponent(SettlementRelationshipComponent).create_settlement()
-                    self.model.environment[SettlementRelationshipComponent].settlements[sttlID].pos.append(new_unq_id)
-                    self.logger.info('CREATE.SETTLEMENT: {} {}'.format(sttlID, new_unq_id))
-                    self.model.environment.cells.at[new_unq_id, 'isSettlement'] = sttlID
+                        # Create a new Settlement
+                        sttlID = self.model.environment.getComponent(
+                            SettlementRelationshipComponent).create_settlement()
+                        self.model.environment[SettlementRelationshipComponent].settlements[sttlID].pos.append(
+                            new_unq_id)
+                        self.new_settlements.append(sttlID)
+                        self.logger.info('CREATE.SETTLEMENT: {} {}'.format(sttlID, new_unq_id))
+                        self.model.environment.cells.at[new_unq_id, 'isSettlement'] = sttlID
+                    else:  # Household will stay put in the event that their is absolutely no where for them to go.
+                        self.settlement_move_locs[old_sid] = self.model.environment[
+                            SettlementRelationshipComponent].settlements[old_sid].pos[0]
 
             # Move House and add it to settlement
             new_x, new_y = self.model.environment.cells['pos'][self.settlement_move_locs[old_sid]]
