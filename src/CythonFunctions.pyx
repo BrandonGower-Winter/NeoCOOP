@@ -335,5 +335,6 @@ cdef class CAgentUtilityFunctions:
         cdef np.ndarray result
         result = (ws ** b) - m * ds
 
-        return result / np.abs(result).sum()
+        cdef float sum = result[result > 0].sum()
+        return result / sum if sum > 0.0 else result * 0.0
         #return (result - result.min()) / (result.max() - result.min())

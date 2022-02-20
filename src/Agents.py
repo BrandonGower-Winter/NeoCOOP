@@ -502,6 +502,8 @@ class SettlementRelationshipComponent(Component):
 
     def get_learning_rate_std(self, sID):
         """Returns the Standard Deviation of the House Learning Rate for all Households that are in settlement sID """
+        if len(self.settlements[sID].occupants) < 2:
+            return 0.0
         return statistics.stdev(
             [self.model.environment.getAgent(h)[HouseholdPreferenceComponent].learning_rate
              for h in self.settlements[sID].occupants
@@ -514,7 +516,7 @@ class SettlementRelationshipComponent(Component):
                 for h in self.settlements[sID].occupants
                 if self.model.environment.getAgent(h).hasComponent(HouseholdPreferenceComponent)]
 
-        return statistics.stdev(vals) if sum(vals) > 0.0 else 0.0
+        return statistics.stdev(vals) if sum(vals) > 0.0 and len(vals) > 1 else 0.0
 
     def get_farm_utility_std(self, sID):
         """Returns the Standard Deviation of the House Farm Utility for all Households that are in settlement sID """
@@ -522,11 +524,13 @@ class SettlementRelationshipComponent(Component):
                 for h in self.settlements[sID].occupants
                 if self.model.environment.getAgent(h).hasComponent(HouseholdPreferenceComponent)]
 
-        return statistics.stdev(vals) if sum(vals) > 0.0 else 0.0
+        return statistics.stdev(vals) if sum(vals) > 0.0 and len(vals) > 1 else 0.0
 
     def get_peer_transfer_std(self, sID):
         """Returns the Standard Deviation of the House Peer Resource Transfer Chance for all Households
         that are in settlement sID """
+        if len(self.settlements[sID].occupants) < 2:
+            return 0.0
         return statistics.stdev(
             [self.model.environment.getAgent(h)[HouseholdRelationshipComponent].peer_resource_transfer_chance
              for h in self.settlements[sID].occupants
@@ -536,6 +540,8 @@ class SettlementRelationshipComponent(Component):
     def get_sub_transfer_std(self, sID):
         """Returns the Standard Deviation of the House Sub Resource Transfer Chance for all Households
         that are in settlement sID """
+        if len(self.settlements[sID].occupants) < 2:
+            return 0.0
         return statistics.stdev(
             [self.model.environment.getAgent(h)[HouseholdRelationshipComponent].sub_resource_transfer_chance
              for h in self.settlements[sID].occupants
@@ -544,6 +550,10 @@ class SettlementRelationshipComponent(Component):
 
     def get_conformity_std(self, sID):
         """Returns the Standard Deviation of the House Conformity for all Households that are in settlement sID """
+
+        if len(self.settlements[sID].occupants) < 2:
+            return 0.0
+
         return statistics.stdev(
             [self.model.environment.getAgent(h)[IEComponent].conformity
              for h in self.settlements[sID].occupants
@@ -796,83 +806,104 @@ class AgentResourceTransferSystem(System, IDecodable, ILoggable):
         # For each settlement with excess wealth
         for settlement in [sr_comp.settlements[s] for s in sr_comp.settlements if excess_wealth[s] > 0]:
 
+            # Separate the households into two lists (the have's and have-not's)
+            excess_households = []
+            peer_households = []
+            sub_households = []
+            poor_households = []
+
             for household in [self.model.environment.getAgent(h) for h in settlement.occupants]:
-
-                # If resources < needed resources: ask for help
                 if household[ResourceComponent].resources < household[ResourceComponent].required_resources():
+                    poor_households.append(household)
+                else:
+                    # Here we check if an agent is willing to grant resource transfer requests to subordinates or peers
+                    excess_households.append(household)
+                    # Sub Check
+                    if self.model.random.random() < household[HouseholdRelationshipComponent].sub_resource_transfer_chance:
+                        sub_households.append(household)
+                    # Peer Check
+                    if self.model.random.random() < household[HouseholdRelationshipComponent].peer_resource_transfer_chance:
+                        peer_households.append(household)
 
-                    resources_needed = household[ResourceComponent].required_resources() - household[ResourceComponent].resources
-                    # Get auth relationships as primary providers
-                    providers = self.model.environment[SettlementRelationshipComponent].get_all_auth_with_excess(household)
+            for household in poor_households:
+                resources_needed = household[ResourceComponent].required_resources() - household[ResourceComponent].resources
 
-                    # Get required resources
-                    # Get help from superiors randomly
+                # Get auth relationships as primary providers
+                providers = [auth for auth in sub_households if auth[HouseholdRelationshipComponent].is_auth(household)]
+
+                # Get required resources
+                # Get help from superiors randomly
+                while len(providers) != 0 and resources_needed > 0:
+                    provider = self.model.random.choice(providers)
+                    providers.remove(provider)
+                    resource_given = AgentResourceTransferSystem.ask_for_resources(provider, resources_needed)
+                    household[ResourceComponent].resources += resource_given
+
+                    if resource_given > 0:
+                        log_string += 'HOUSEHOLD.RESOURCES.TRANSFER.AUTH: {} {} {}\n'.format(
+                            household.id, provider.id, resource_given)
+                    else:  # Household has not more resources left so we remove it to save on computation time later
+                        excess_households.remove(provider)
+                        sub_households.remove(provider)
+                        if provider in peer_households:
+                            peer_households.remove(provider)
+
+                    # Update amount of resources needed
+                    resources_needed -= resource_given
+
+                # Note: If an agent has no load and still requires resources, that means that it's peers
+                # and subordinates (of which there will be none) will also have no resources to give and, therefore,
+                # we won't have to check any transfer requests.
+                if resources_needed > 0 and household[HouseholdRelationshipComponent].load > 0:
+                    # Get peers as secondary providers
+                    providers = [peer for peer in peer_households if peer[HouseholdRelationshipComponent].is_peer(household)]
+
+                    while len(providers) != 0 and resources_needed > 0:
+                        provider = self.model.random.choice(providers)
+                        providers.remove(provider)
+                        resource_given = AgentResourceTransferSystem.ask_for_resources(provider, resources_needed)
+                        household[ResourceComponent].resources += resource_given
+
+                        if resource_given > 0:
+                            log_string += 'HOUSEHOLD.RESOURCES.TRANSFER.PEER: {} {} {}\n'.format(
+                                household.id, provider.id, resource_given)
+                        else:  # Household has not more resources left so we remove it to save on computation time later
+                            excess_households.remove(provider)
+                            peer_households.remove(provider)
+
+                            if provider in sub_households:
+                                sub_households.remove(provider)
+
+                        # Update amount of resources needed
+                        resources_needed -= resource_given
+
+                if resources_needed > 0 and household[HouseholdRelationshipComponent].load > 0:
+                    # Get subordinates as tertiary providers
+                    providers = [sub for sub in excess_households if sub[HouseholdRelationshipComponent].is_sub(household)]
+
                     while len(providers) != 0 and resources_needed > 0:
                         provider = self.model.random.choice(providers)
                         providers.remove(provider)
 
-                        if self.model.random.random() < provider[HouseholdRelationshipComponent].sub_resource_transfer_chance:
-                            resource_given = AgentResourceTransferSystem.ask_for_resources(provider, resources_needed)
-                            household[ResourceComponent].resources += resource_given
+                        # Subordinates cannot say no to giving away excess resources
 
-                            if resource_given > 0:
-                                log_string += 'HOUSEHOLD.RESOURCES.TRANSFER.SUCCESS.AUTH: {} {} {}\n'.format(
-                                    household.id, provider.id, resource_given)
+                        resource_given = AgentResourceTransferSystem.ask_for_resources(provider, resources_needed)
+                        household[ResourceComponent].resources += resource_given
 
-                            # Update amount of resources needed
-                            resources_needed -= resource_given
+                        if resource_given > 0:
+                            log_string += 'HOUSEHOLD.RESOURCES.TRANSFER.SUB: {} {} {}\n'.format(
+                                household.id, provider.id, resource_given)
+                        else:  # Household has not more resources left so we remove it to save on computation time later
+                            excess_households.remove(provider)
 
-                        else:
-                            log_string += 'HOUSEHOLD.RESOURCES.TRANSFER.REJECT.AUTH: {} {}\n'.format(
-                                household.id, provider.id
-                            )
+                            if provider in sub_households:
+                                sub_households.remove(provider)
 
-                    # Note: If an agent has no load and still requires resources, that means that it's peers
-                    # and subordinates (of which there will be none) will also have no resources to give and, therefore,
-                    # we won't have to check any transfer requests.
+                            if provider in peer_households:
+                                peer_households.remove(provider)
 
-                    if resources_needed > 0 and household[HouseholdRelationshipComponent].load > 0:
-                        # Get peers as secondary providers
-                        providers = self.model.environment[SettlementRelationshipComponent].get_all_peer_with_excess(household)
-
-                        while len(providers) != 0 and resources_needed > 0:
-                            provider = self.model.random.choice(providers)
-                            providers.remove(provider)
-
-                            if self.model.random.random() < provider[HouseholdRelationshipComponent].peer_resource_transfer_chance:
-
-                                resource_given = AgentResourceTransferSystem.ask_for_resources(provider, resources_needed)
-                                household[ResourceComponent].resources += resource_given
-
-                                if resource_given > 0:
-                                    log_string += 'HOUSEHOLD.RESOURCES.TRANSFER.SUCCESS.PEER: {} {} {}\n'.format(
-                                        household.id, provider.id, resource_given)
-
-                                # Update amount of resources needed
-                                resources_needed -= resource_given
-                            else:
-                                log_string += 'HOUSEHOLD.RESOURCES.TRANSFER.REJECT.PEER: {} {}\n'.format(
-                                    household.id, provider.id)
-
-                    if resources_needed > 0 and household[HouseholdRelationshipComponent].load > 0:
-                        # Get subordinates as tertiary providers
-                        providers = self.model.environment[SettlementRelationshipComponent].get_all_sub(household)
-
-                        while len(providers) != 0 and resources_needed > 0:
-                            provider = self.model.random.choice(providers)
-                            providers.remove(provider)
-
-                            # Subordinates cannot say no to giving away excess resources
-
-                            resource_given = AgentResourceTransferSystem.ask_for_resources(provider, resources_needed)
-                            household[ResourceComponent].resources += resource_given
-
-                            if resource_given > 0:
-                                log_string += 'HOUSEHOLD.RESOURCES.TRANSFER.SUCCESS.SUB: {} {} {}\n'.format(
-                                    household.id, provider.id, resource_given)
-
-                            # Update amount of resources needed
-                            resources_needed -= resource_given
+                        # Update amount of resources needed
+                        resources_needed -= resource_given
 
         self.logger.info(log_string)
         self.logger.info('SYS.TIME: {} {}\n'.format(self.id, time.time() - start_time))
@@ -1407,6 +1438,7 @@ class BeliefSpace:
 class AgentIEAdaptationSystem(System, IDecodable, ILoggable):
     """ This System Manages the Cultural Algorithm that allows for peer influenced agent adaptation """
     influence_rate = 0.05
+    novelty_rate = 0.05
     influence_type = 'AVG'
     persist_belief_space = False
 
@@ -1423,10 +1455,13 @@ class AgentIEAdaptationSystem(System, IDecodable, ILoggable):
         belief_spaces = {}
 
         sr_comp = self.model.environment[SettlementRelationshipComponent]
-        # Calculate Belief Space for each settlement
+
+        # Calculate Belief Space details for each settlement
         settlements = [sr_comp.settlements[s] for s in sr_comp.settlements]
         wealth_dict = {}
+        normative_prob = {}
         pos_dict = {}
+
         for settlement in settlements:
             bs = sr_comp.create_belief_space(settlement.id)
             if AgentIEAdaptationSystem.persist_belief_space and settlement.id in self.belief_spaces:
@@ -1440,12 +1475,10 @@ class AgentIEAdaptationSystem(System, IDecodable, ILoggable):
         # Influence Each Settlement's belief space using XTENT
         pos_series = self.model.environment.cells['pos']
 
-        influenced_belief_spaces = {}  # Influence Happens Simultaneously so we have to duplicate the belief spaces
-        for key in belief_spaces:
-            influenced_belief_spaces[key] = belief_spaces[key].duplicate()
+        # Calculate Influence Belief Space
+        influenced_belief_spaces = {}
 
         for settlement in settlements:
-
             ss = [s for s in sr_comp.settlements if s != settlement.id]
             ws = np.array([wealth_dict[s] for s in ss])
 
@@ -1457,20 +1490,54 @@ class AgentIEAdaptationSystem(System, IDecodable, ILoggable):
 
             xtent_dst = CAgentUtilityFunctions.xtent_distribution(ws, ds, IEComponent.b, IEComponent.m)
 
+            rand_val = self.model.random.random()
+            rand_count = 0.0
             for index in range(len(xtent_dst)):
                 if xtent_dst[index] > 0.0:
-                    influenced_belief_spaces[settlement.id].influence(belief_spaces[ss[index]],
-                                                                      xtent_dst[index] if xtent_dst[index] < 1.0 else 1.0)  # Have to clamp it at 1
+                    rand_count += ws[index]
+                    if rand_count > rand_val:
+                        influenced_belief_spaces[settlement.id] = belief_spaces[ss[index]]
+                        normative_prob[settlement.id] = wealth_dict[settlement.id] / ws[index] if ws[index] > 0 else 1.0
+                        break
 
-        belief_spaces = influenced_belief_spaces
+            if settlement.id not in normative_prob:  # If no settlement can influence s, it influences itself with 100%
+                normative_prob[settlement.id] = 1.0
 
         # Influence Each Household using Updated Settlement belief spaces
         for agent in self.model.environment.getAgents():
+            sID = agent[HouseholdRelationshipComponent].settlementID
             if self.model.random.random() < AgentIEAdaptationSystem.influence_rate:
-                AgentIEAdaptationSystem.influence_agent(agent, belief_spaces[agent[HouseholdRelationshipComponent
-                ].settlementID])
+                # Choose which belief space is going to influence the agent
+                # First we check for novelty
+                if self.model.random.random() < AgentIEAdaptationSystem.novelty_rate:
+                    index = self.model.random.randint(0, 6)
 
-                log_string += 'HOUSEHOLD.INFLUENCE: {}\n'.format(agent.id)
+                    if index == 0:  # Peer Transfer
+                        agent[HouseholdRelationshipComponent].peer_resource_transfer_chance = self.model.random.random()
+                    elif index == 1:  # Sub Transfer
+                        agent[HouseholdRelationshipComponent].sub_resource_transfer_chance = self.model.random.random()
+                    elif index == 2:  # Forage Utility
+                        agent[HouseholdPreferenceComponent].forage_utility = self.model.random.gauss(
+                            agent[HouseholdPreferenceComponent].forage_utility, sr_comp.get_forage_utility_std(sID))
+                    elif index == 3:  # Farm Utility
+                        agent[HouseholdPreferenceComponent].farm_utility = self.model.random.gauss(
+                            agent[HouseholdPreferenceComponent].farm_utility, sr_comp.get_farm_utility_std(sID))
+                    elif index == 4:  # Learning Rate
+                        agent[HouseholdPreferenceComponent].learning_rate = self.model.random.gauss(
+                            agent[HouseholdPreferenceComponent].learning_rate, sr_comp.get_learning_rate_std(sID))
+                    else:  # Conformity
+                        agent[IEComponent].conformity = max(0.01, self.model.random.gauss(
+                            agent[IEComponent].conformity, sr_comp.get_conformity_std(sID)))
+
+                    log_string += 'HOUSEHOLD.INFLUENCE.DOMAIN: {}\n'.format(agent.id)
+                else:
+                    # Determine if NORMATIVE or SPATIAL knowledge sources should be used.
+                    if self.model.random.random() < normative_prob[sID]:
+                        AgentIEAdaptationSystem.influence_agent(agent, belief_spaces[sID])
+                        log_string += 'HOUSEHOLD.INFLUENCE.NORMATIVE: {}\n'.format(agent.id)
+                    else:
+                        AgentIEAdaptationSystem.influence_agent(agent, influenced_belief_spaces[sID])
+                        log_string += 'HOUSEHOLD.INFLUENCE.SPATIAL: {}\n'.format(agent.id)
 
         self.belief_spaces = belief_spaces
         self.logger.info(log_string)
