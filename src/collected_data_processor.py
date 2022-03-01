@@ -186,18 +186,13 @@ def main():
 
                 to_write[runs[i]]['logs'] = {
                     'AUTH': [
-                        (x['HOUSEHOLD.RESOURCES.TRANSFER.SUCCESS.AUTH'] if 'HOUSEHOLD.RESOURCES.TRANSFER.SUCCESS.AUTH' in x else 0)
-                        + (x['HOUSEHOLD.RESOURCES.TRANSFER.FAIL.AUTH'] if 'HOUSEHOLD.RESOURCES.TRANSFER.FAIL.AUTH' in x else 0)
+                        (x['HOUSEHOLD.RESOURCES.TRANSFER.AUTH'] if 'HOUSEHOLD.RESOURCES.TRANSFER.AUTH' in x else 0)
                         for x in log_file],
                     'PEER': [
-                        (x['HOUSEHOLD.RESOURCES.TRANSFER.SUCCESS.PEER'] if 'HOUSEHOLD.RESOURCES.TRANSFER.SUCCESS.PEER' in x else 0)
-                        + (x['HOUSEHOLD.RESOURCES.TRANSFER.FAIL.PEER'] if 'HOUSEHOLD.RESOURCES.TRANSFER.FAIL.PEER' in x else 0)
-                        + (x['HOUSEHOLD.RESOURCES.TRANSFER.REJECT.PEER'] if 'HOUSEHOLD.RESOURCES.TRANSFER.REJECT.PEER' in x else 0)
+                        (x['HOUSEHOLD.RESOURCES.TRANSFER.PEER'] if 'HOUSEHOLD.RESOURCES.TRANSFER.PEER' in x else 0)
                         for x in log_file],
                     'SUB': [
-                        (x['HOUSEHOLD.RESOURCES.TRANSFER.SUCCESS.SUB'] if 'HOUSEHOLD.RESOURCES.TRANSFER.SUCCESS.SUB' in x else 0)
-                        + (x['HOUSEHOLD.RESOURCES.TRANSFER.FAIL.SUB'] if 'HOUSEHOLD.RESOURCES.TRANSFER.FAIL.SUB' in x else 0)
-                        + (x['HOUSEHOLD.RESOURCES.TRANSFER.REJECT.SUB'] if 'HOUSEHOLD.RESOURCES.TRANSFER.REJECT.SUB' in x else 0)
+                        (x['HOUSEHOLD.RESOURCES.TRANSFER.SUB'] if 'HOUSEHOLD.RESOURCES.TRANSFER.SUB' in x else 0)
                         for x in log_file]
                 }
 

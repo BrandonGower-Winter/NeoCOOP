@@ -132,7 +132,7 @@
         "birth_rate": 0.0015,
         "death_rate": 0.001,
         "yrs_per_move": 5,
-        "init_settlements":  4,
+        "init_settlements":  20,
         "cell_capacity": 100
       }
     }
@@ -155,8 +155,8 @@
         "move_lookback": 3,
         "load_difference": 0.6,
         "init_preference": 1562.5,
-        "learning_rate_range": [0.05, 0.2],
-        "conformity_range": [0.05, 0.2],
+        "learning_rate_range": [0.01, 0.1],
+        "conformity_range": [0.01, 0.1],
         "mutation_rate": 0.05,
         "b": 0.75,
         "m": 1.5

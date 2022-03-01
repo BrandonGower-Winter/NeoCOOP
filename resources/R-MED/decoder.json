@@ -6,7 +6,7 @@
   "model" : {
     "name" : "GECCOModel",
     "params" : {
-      "iterations": 10000,
+      "iterations": 20000,
       "img_height" : 100,
       "img_width" : 100,
       "start_x": 0,
@@ -30,7 +30,7 @@
         "start_rainfall" : [25, 28],
         "end_rainfall" : [10, 13],
         "soil_depth" : 1000,
-        "interpolator_range": 10000,
+        "interpolator_range": 20000,
         "temperature_dict": {
           "id": "linear",
           "frequency": 16,
@@ -39,7 +39,7 @@
         },
         "rainfall_dict": {
           "id": "cosine",
-          "frequency": 16,
+          "frequency": 32,
           "k": 1,
           "m": 1
         }
@@ -129,10 +129,10 @@
       {
         "id": "APS",
         "priority": 4,
-        "birth_rate": 0.00135,
+        "birth_rate": 0.0015,
         "death_rate": 0.001,
         "yrs_per_move": 5,
-        "init_settlements":  4,
+        "init_settlements":  20,
         "cell_capacity": 100
       }
     }
@@ -155,8 +155,8 @@
         "move_lookback": 3,
         "load_difference": 0.6,
         "init_preference": 1562.5,
-        "learning_rate_range": [0.05, 0.2],
-        "conformity_range": [0.05, 0.2],
+        "learning_rate_range": [0.01, 0.1],
+        "conformity_range": [0.01, 0.1],
         "mutation_rate": 0.05,
         "b": 0.75,
         "m": 1.5
