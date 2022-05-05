@@ -17,24 +17,26 @@ matplotlib.rcParams['ps.fonttype'] = 42
 
 array_size = 4000
 iteration_multiplier = 5
+runs_count = 10
 
 def get_scenario_data(runs: {}):
 
-    placeholder = np.zeros((array_size, len(runs)), dtype=float)
-    placeholder_pop = np.zeros((array_size, len(runs)), dtype=float)
-    peer_placeholder = np.zeros((array_size, len(runs)), dtype=float)
-    sub_placeholder = np.zeros((array_size, len(runs)), dtype=float)
-    gini_pop = np.zeros((array_size, len(runs)), dtype=float)
-    settlements_pop = np.zeros((array_size, len(runs)), dtype=float)
+    placeholder = np.zeros((array_size, runs_count), dtype=float)
+    placeholder_pop = np.zeros((array_size, runs_count), dtype=float)
+    peer_placeholder = np.zeros((array_size, runs_count), dtype=float)
+    sub_placeholder = np.zeros((array_size, runs_count), dtype=float)
+    gini_pop = np.zeros((array_size, runs_count), dtype=float)
+    settlements_pop = np.zeros((array_size, runs_count), dtype=float)
 
-    sub_requests = np.zeros((array_size * iteration_multiplier, len(runs)), dtype=float)
-    auth_requests = np.zeros((array_size * iteration_multiplier, len(runs)), dtype=float)
-    peer_requests = np.zeros((array_size * iteration_multiplier, len(runs)), dtype=float)
+    sub_requests = np.zeros((array_size * iteration_multiplier, runs_count), dtype=float)
+    auth_requests = np.zeros((array_size * iteration_multiplier, runs_count), dtype=float)
+    peer_requests = np.zeros((array_size * iteration_multiplier, runs_count), dtype=float)
 
-    peer_dst_placeholder = np.zeros((array_size, len(runs), 10), dtype=float)
-    sub_dst_placeholder = np.zeros((array_size, len(runs), 10), dtype=float)
+    peer_dst_placeholder = np.zeros((array_size, runs_count, 10), dtype=float)
+    sub_dst_placeholder = np.zeros((array_size, runs_count, 10), dtype=float)
 
     index = 0
+    runs_processed = 1
     for seed in runs:
         for i in range(array_size):
             placeholder[i][index] = runs[seed]['population']['number'][i]
@@ -53,10 +55,13 @@ def get_scenario_data(runs: {}):
             peer_requests[i][index] = runs[seed]['logs']['PEER'][i]
 
         index += 1
+        runs_processed += 1
+        if runs_processed > runs_count:
+            break
 
     line_data = np.zeros((21, array_size), dtype=float)
     bar_data = np.zeros((2, 3, 10), dtype=float)
-    stats_data = np.zeros((3,50), dtype=float)
+    stats_data = np.zeros((3,runs_count), dtype=float)
     population_data = placeholder
     log_data = np.zeros((6, array_size * iteration_multiplier), dtype=float)
 
@@ -244,10 +249,10 @@ def main():
                None,
                [2, 4], 'Iteration', 'Resource Transfer Probability (%)', legend='lower left', data_types=data_types)
 
-    write_plot(['F-HIGH', 'F-MED', 'F-LOW'], '%s/transfer_chance/F_peer' % parser.output, data,
+    write_plot(['F-80','F-HIGH', 'F-48', 'F-MED', 'F-LOW', 'F-8'], '%s/transfer_chance/F_peer' % parser.output, data,
                None,
                [2], 'Iteration', 'Peer Resource Transfer Probability (%)', legend='lower left')
-    write_plot(['F-HIGH', 'F-MED', 'F-LOW'], '%s/transfer_chance/F_sub' % parser.output, data,
+    write_plot(['F-80','F-HIGH', 'F-48', 'F-MED', 'F-LOW', 'F-8'], '%s/transfer_chance/F_sub' % parser.output, data,
                None,
                [4], 'Iteration', 'Sub Resource Transfer Probability (%)', legend='lower left')
 
