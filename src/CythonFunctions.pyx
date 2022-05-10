@@ -1,7 +1,7 @@
 import numpy as np
 cimport numpy as np
 
-from libc.math cimport cos, exp
+from libc.math cimport cos, sin, exp
 
 # General Functions
 
@@ -101,25 +101,22 @@ cdef class CVegetationGrowthSystemFunctions:
     def waterPenalty(float moisture, float moisture_ideal):
 
         if moisture < moisture_ideal:
-            return moisture / moisture_ideal, 0.0
+            return 0.5 + moisture / moisture_ideal, 0.0
         else:
             return 1.0, moisture - moisture_ideal
 
     @staticmethod
     cdef float tOpt(float temp):
-        return -0.0005 * ((temp - 20.0) ** 2) + 1
+        return 1.1814 / (1 + exp(0.2 * (10.0 - temp))) / (1 + exp(0.3 * (-30.0 + temp)))
 
     @staticmethod
     def tempPenalty(float temperature, random):
-        cdef float topt
-
-        topt = CVegetationGrowthSystemFunctions.tOpt(temperature)
-        return random.uniform(0.8 - 0.0005 * (topt ** 2.0), 0.8 + 0.02 * topt)
+        return CVegetationGrowthSystemFunctions.tOpt(temperature)
 
     @staticmethod
-    def VGProcess(df, vg_comp, sm_comp, ge_comp, random) -> ([float], [float]):
+    def VGProcess(df, vg_comp, sm_comp, ge_comp, area, random) -> ([float], [float]):
 
-        cdef float r, topt
+        cdef float r
 
         cdef np.ndarray[double] veg_cells = df['vegetation'].to_numpy()
         cdef np.ndarray[double] moist_cells = df['moisture'].to_numpy()
@@ -131,26 +128,27 @@ cdef class CVegetationGrowthSystemFunctions:
         cdef np.ndarray[double] moist_avail = moist_cells - (veg_cells / vg_comp.carry_pop * vg_comp.ideal_moisture)
 
         # Calculate water penalties
-        np.clip(moist_avail / vg_comp.ideal_moisture , 0.0, 1.0, out=rs)
+        np.clip(0.5 + moist_avail / vg_comp.ideal_moisture , 0.0, 1.0, out=rs)
 
         # Calculate remaining moisture
         np.clip(moist_avail - vg_comp.ideal_moisture, 0.0, None, out=moist_cells)
 
         # Calculate the temperature penalty
-        topt = CVegetationGrowthSystemFunctions.tOpt(np.mean(ge_comp.temp))
-        rs *= random.uniform(0.8 - 0.0005 * (topt ** 2.0), 0.8 + 0.02 * topt)
+        rs *=  CVegetationGrowthSystemFunctions.tOpt(np.mean(ge_comp.temp))
 
         # Apply slope penalty
         rs *= slope_penalty_cells
 
-        # Update Vegetation Values:
-        cdef float filter_cond = (0.001 * vg_comp.carry_pop)
-        _filter = [veg_cells <= filter_cond, veg_cells > filter_cond]
-        choicelist = [veg_cells + rs * vg_comp.growth_rate,
-                      np.clip(veg_cells - (veg_cells * vg_comp.decay_rate) + (veg_cells * rs * vg_comp.growth_rate),
-                              0.0, vg_comp.carry_pop)]
-        veg_cells = np.select(_filter, choicelist)
 
+        cdef np.ndarray[double] simple_ndvi = 0.023 + 0.611 * (veg_cells / vg_comp.carry_pop)
+        cdef np.ndarray[double] fpar = ((simple_ndvi - 0.023) * 0.94) * 1.637 + 0.01
+        cdef np.ndarray[double] apar = np.sum(ge_comp.solar) * 0.5 * fpar
+        cdef np.ndarray[double] npp = apar * rs
+
+        # Decay Old Veg Cells
+        veg_cells = veg_cells * (1 / (1 + np.exp((rs - 0.5) * -10)))
+        # Add new NPP to Veg Cells through yield conversion from T/ha to Kg/m
+        veg_cells += 0.0011318 * npp * area
         return veg_cells, moist_cells
 
 #######################################################################################################################
@@ -169,13 +167,30 @@ cdef class CAgentResourceConsumptionSystemFunctions:
 
     @staticmethod
     def ARCProcess(object resComp) -> float:
-        cdef float req_res, rem_res, hunger
+        cdef float curr_res, req_res, rem_res, hunger, consumed, i_left
+        cdef int i
 
+        curr_res = resComp.resources
         req_res = resComp.required_resources()
-        rem_res, hunger = CAgentResourceConsumptionSystemFunctions.consume(resComp.resources, req_res)
+        rem_res, hunger = CAgentResourceConsumptionSystemFunctions.consume(curr_res, req_res)
         resComp.hunger = hunger
         resComp.satisfaction += hunger
         resComp.resources = rem_res
+
+        if rem_res == 0.0:
+            for i in range(len(resComp.storage_decay)):
+                resComp.storage_decay[i] = 0
+        else:
+            consumed = curr_res - rem_res
+            for i in range(len(resComp.storage_decay)):
+
+                i_left = max(0.0, resComp.storage_decay[i] - consumed)
+                consumed -= resComp.storage_decay[i]
+                resComp.storage_decay[i] = i_left
+
+                if consumed < 0.005:
+                    break
+
 
         return req_res * hunger
 
@@ -288,7 +303,7 @@ cdef class CGlobalEnvironmentCurves:
 
     @staticmethod
     cdef float cosine(float t, float frequency):
-        return 0.5 * cos( frequency * t) + 0.5
+        return 0.5 * sin( frequency * t) + 0.5
 
     @staticmethod
     def cosine_lerp(float a, float b, float t, float frequency):

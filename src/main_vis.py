@@ -537,10 +537,10 @@ def generate_environment_plots(parser, pixels):
                      parser.path + '/environment_plots/land_ownership_animat', 100, vmin=0, vmax=2)
     pandas_to_animat('Animation of `Vegetation` over 1000 years', parser.width, parser.height, environment_snapshots,
                      'vegetation',
-                     parser.path + '/environment_plots/vegetation_animat', 10, vmin=0, vmax=10500)
-    pandas_to_animat('Animation of `Soil Moisture` over 1000 years', parser.width, parser.height, environment_snapshots,
-                     'moisture',
-                     parser.path + '/environment_plots/moisture_animat', 10, vmin=0, vmax=700)
+                     parser.path + '/environment_plots/vegetation_animat', 10, vmin=0, vmax=21500)
+    #pandas_to_animat('Animation of `Soil Moisture` over 1000 years', parser.width, parser.height, environment_snapshots,
+                     #'moisture',
+                     #parser.path + '/environment_plots/moisture_animat', 10, vmin=0, vmax=700)
 
 
 def generate_log_plots(parser):
@@ -555,14 +555,9 @@ def generate_log_plots(parser):
                                 y_label='Number of actions', default_val=0, legend='center left')
     generate_plot_from_log_list("House Resource Transfer Actions over 2000 iterations", log_list,
                                 parser.path + '/log_plots/ResourceTransfer.png',
-                                ['HOUSEHOLD.RESOURCES.TRANSFER.SUCCESS.PEER',
-                                 'HOUSEHOLD.RESOURCES.TRANSFER.SUCCESS.AUTH',
-                                 'HOUSEHOLD.RESOURCES.TRANSFER.SUCCESS.SUB',
-                                 'HOUSEHOLD.RESOURCES.TRANSFER.FAIL.PEER',
-                                 'HOUSEHOLD.RESOURCES.TRANSFER.FAIL.AUTH',
-                                 'HOUSEHOLD.RESOURCES.TRANSFER.FAIL.SUB',
-                                 'HOUSEHOLD.RESOURCES.TRANSFER.REJECT.PEER',
-                                 'HOUSEHOLD.RESOURCES.TRANSFER.REJECT.AUTH'],
+                                ['HOUSEHOLD.RESOURCES.TRANSFER.PEER',
+                                 'HOUSEHOLD.RESOURCES.TRANSFER.AUTH',
+                                 'HOUSEHOLD.RESOURCES.TRANSFER.SUB'],
                                 y_label='Number of actions', default_val=0, legend='center left')
 
 
@@ -637,9 +632,9 @@ if __name__ == '__main__':
         for x in range(parser.width):
             pixels.append(0)
 
-    generate_settlement_plots(parser, pixels)
+    #generate_settlement_plots(parser, pixels)
     generate_log_plots(parser)
-    generate_environment_plots(parser, pixels)
+    #generate_environment_plots(parser, pixels)
     generate_household_plots(parser)
 
     #other_stuff()

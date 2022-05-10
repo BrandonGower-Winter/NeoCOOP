@@ -6,14 +6,14 @@
   "model" : {
     "name" : "GECCOModel",
     "params" : {
-      "iterations": 20000,
+      "iterations": 10000,
       "img_height" : 100,
       "img_width" : 100,
       "start_x": 0,
       "start_y": 0,
       "max_height" : 1400,
       "min_height" : 0,
-      "cell_dim" : 2000
+      "cell_dim" : 100
     }
   },
 
@@ -27,10 +27,12 @@
         "priority" : 10,
         "start_temp" : [13,27],
         "end_temp" : [13,27],
-        "start_rainfall" : [25, 28],
-        "end_rainfall" : [10, 13],
+        "start_rainfall" : [58, 62],
+        "end_rainfall" : [14, 16],
+        "start_solar" : [18.67, 21.78],
+        "end_solar" : [18.67, 21.78],
         "soil_depth" : 1000,
-        "interpolator_range": 20000,
+        "interpolator_range": 10000,
         "temperature_dict": {
           "id": "linear",
           "frequency": 16,
@@ -39,6 +41,12 @@
         },
         "rainfall_dict": {
           "id": "cosine",
+          "frequency": 1000,
+          "k": 1,
+          "m": 1
+        },
+        "solar_dict": {
+          "id": "linear",
           "frequency": 16,
           "k": 1,
           "m": 1
@@ -64,11 +72,11 @@
       {
         "id" : "VGS",
         "priority" : 7,
-        "init_pop" : 10500,
-        "carry_pop" : 42000,
+        "init_pop" : 1050,
+        "carry_pop" : 2100,
         "growth_rate" : 3.96,
         "decay_rate" : 0.02,
-        "ideal_moisture" : 2360
+        "ideal_moisture" : 2800
       }
     },
     {
@@ -78,15 +86,15 @@
       {
         "id": "RAS",
         "priority": 8,
-        "farms_per_patch": 12,
+        "farms_per_patch": 1,
         "land_buffer": 1,
-        "max_acquisition_distance": 20,
-        "moisture_consumption_rate": 270,
+        "max_acquisition_distance": 10,
+        "moisture_consumption_rate": 2280,
         "crop_gestation_period": 1,
-        "farming_production_rate": 6000,
-        "forage_consumption_rate": 3125,
-        "forage_production_multiplier": 1,
-        "delay_factor": 1,
+        "farming_production_rate": 400,
+        "forage_consumption_rate": 150,
+        "forage_production_multiplier": 2,
+        "storage_yrs": 3,
         "max_farmable_slope" : 45
       }
     },
@@ -132,7 +140,7 @@
         "birth_rate": 0.0015,
         "death_rate": 0.001,
         "yrs_per_move": 5,
-        "init_settlements":  20,
+        "init_settlements":  10,
         "cell_capacity": 100
       }
     }
@@ -148,28 +156,23 @@
         "age_of_maturity": 10,
         "consumption_rate": 250,
         "child_factor": 0.5,
-        "carrying_capacity": 12,
-        "init_occupants": 6,
+        "carrying_capacity": 10,
+        "init_occupants": 5,
         "init_age_range": [13, 25],
-        "vision_square": 2500,
+        "vision_square": 10000,
         "move_lookback": 3,
         "load_difference": 0.6,
-        "init_preference": 1562.5,
+        "init_preference": 250,
         "learning_rate_range": [0.01, 0.1],
         "conformity_range": [0.01, 0.1],
         "mutation_rate": 0.05,
-        "b": 0.75,
-        "m": 1.5
+        "b": 1.5,
+        "m": 0.005
       },
       "post_agent_init": {
         "func": "init_settlements",
         "params": {
-          "strategy": "grouped",
-          "adjust_ranges": [
-            [0.05, 0.45, 0.55, 0.95],
-            [0.55, 0.95, 0.05, 0.45],
-            [0.55, 0.95, 0.55, 0.95],
-            [0.55, 0.95, 0.55, 0.95]]
+          "strategy": "random"
         }
       }
     }

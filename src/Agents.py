@@ -43,6 +43,7 @@ class ResourceComponent(Component):
         self.hunger = 0
         self.satisfaction = 0.0
         self.ownedLand = []
+        self.storage_decay = []
         self.a_workers = 0
 
     def add_occupant(self, id, age: int = 0):
@@ -573,6 +574,8 @@ class AgentResourceAcquisitionSystem(System, IDecodable, ILoggable):
     forage_consumption_rate = 0
     forage_production_multiplier = 0.0
 
+    storage_yrs = 1
+
     @staticmethod
     def decode(params: dict):
         AgentResourceAcquisitionSystem.farms_per_patch = params['farms_per_patch']
@@ -583,7 +586,7 @@ class AgentResourceAcquisitionSystem(System, IDecodable, ILoggable):
         AgentResourceAcquisitionSystem.farming_production_rate = params['farming_production_rate']
         AgentResourceAcquisitionSystem.forage_consumption_rate = params['forage_consumption_rate']
         AgentResourceAcquisitionSystem.forage_production_multiplier = params['forage_production_multiplier']
-
+        AgentResourceAcquisitionSystem.storage_yrs = params['storage_yrs']
         return AgentResourceAcquisitionSystem(params['id'], params['model'], params['priority'])
 
     def __init__(self, id: str, model: Model,priority):
@@ -662,6 +665,10 @@ class AgentResourceAcquisitionSystem(System, IDecodable, ILoggable):
         for household in self.model.environment.getAgents():
             # Get Settlement ID
             sID = household[HouseholdRelationshipComponent].settlementID
+
+            # Decay storage_yrs harvest
+            if len(household[ResourceComponent].storage_decay) == AgentResourceAcquisitionSystem.storage_yrs:
+                household[ResourceComponent].resources -= household[ResourceComponent].storage_decay.pop()
 
             # Determine how many patches a household can farm
             able_workers = household[ResourceComponent].able_workers()
@@ -754,6 +761,9 @@ class AgentResourceAcquisitionSystem(System, IDecodable, ILoggable):
                     totalForage += new_resources
 
                     log_string += 'HOUSEHOLD.FORAGE: {} {} {}\n'.format(household.id, foragableLand[iForage], new_resources)
+
+            # Add newly acquired resources to decay storage to keep track of them.
+            household[ResourceComponent].storage_decay.append(totalFarm + totalForage)
 
             # Adjust the farm_preference based on number of resources acquired
             AgentResourceAcquisitionSystem.adjust_farm_preference(household, totalForage + totalFarm,

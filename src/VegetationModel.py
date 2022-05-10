@@ -21,18 +21,21 @@ class GlobalEnvironmentComponent(Component):
     """ This Environment Layer Component is responsible for tracking generated rainfall and temperature data. """
 
     def __init__(self, agent, model: Model, start_temp: [int], end_temp: [int], start_rainfall: [int],
-                 end_rainfall: [int], soil_depth: float):
+                 end_rainfall: [int], start_solar: [int], end_solar: [int] , soil_depth: float):
         super().__init__(agent, model)
 
         self.start_temp = start_temp
         self.end_temp = end_temp
         self.start_rainfall = start_rainfall
         self.end_rainfall = end_rainfall
+        self.start_solar = start_solar
+        self.end_solar = end_solar
 
         self.soil_depth = soil_depth
 
         self.temp = []
         self.rainfall = []
+        self.solar = []
 
         # For easier streaming of objects in memory
         del self.model
@@ -76,7 +79,8 @@ class VegetationGrowthComponent(Component):
 class GlobalEnvironmentSystem(System, IDecodable, ILoggable):
     """ This System calculates the global rainfall and temperature values every iteration."""
     def __init__(self, id: str, model: Model, start_temp: [int], end_temp: [int], start_rainfall: [int],
-                 end_rainfall: [int], soil_depth: float, temperature_dict: dict, rainfall_dict: dict,
+                 end_rainfall: [int], start_solar, end_solar, soil_depth: float,
+                 temperature_dict: dict, rainfall_dict: dict, solar_dict : dict,
                  interpolater_range: int, priority=0, frequency=1, start=0, end=maxsize):
 
         System.__init__(self,id, model, priority, frequency, start, end)
@@ -85,16 +89,33 @@ class GlobalEnvironmentSystem(System, IDecodable, ILoggable):
 
         self.temperature_dict = temperature_dict
         self.rainfall_dict = rainfall_dict
+        self.solar_dict = solar_dict
         self.interpolator_range = interpolater_range
 
+        if 'frequency' in self.temperature_dict:
+            temperature_dict['frequency'] = GlobalEnvironmentSystem.convert_to_freq(temperature_dict['frequency'], self.interpolator_range)
+
+        if 'frequency' in self.rainfall_dict:
+            rainfall_dict['frequency'] = GlobalEnvironmentSystem.convert_to_freq(rainfall_dict['frequency'], self.interpolator_range)
+
+        if 'frequency' in self.solar_dict:
+            solar_dict['frequency'] = GlobalEnvironmentSystem.convert_to_freq(solar_dict['frequency'], self.interpolator_range)
+
         model.environment.addComponent(GlobalEnvironmentComponent(model.environment, model, start_temp, end_temp,
-                                                                  start_rainfall, end_rainfall, soil_depth))
+                                                                  start_rainfall, end_rainfall, start_solar,
+                                                                  end_solar, soil_depth))
+
+
+    @staticmethod
+    def convert_to_freq(f, total_duration):
+        return 2 * math.pi * (total_duration / f)
 
     @staticmethod
     def decode(params: dict):
         return GlobalEnvironmentSystem(params['id'], params['model'], params['start_temp'], params['end_temp'],
-                                       params['start_rainfall'], params['end_rainfall'], params['soil_depth'],
-                                       params['temperature_dict'], params['rainfall_dict'], params['interpolator_range'],
+                                       params['start_rainfall'], params['end_rainfall'], params['start_solar'],
+                                       params['end_solar'], params['soil_depth'], params['temperature_dict'],
+                                       params['rainfall_dict'], params['solar_dict'], params['interpolator_range'],
                                        priority=params['priority'])
 
     @staticmethod
@@ -139,6 +160,7 @@ class GlobalEnvironmentSystem(System, IDecodable, ILoggable):
 
         env_comp.temp.clear()
         env_comp.rainfall.clear()
+        env_comp.solar.clear()
 
         percentage = min(self.model.systemManager.timestep / self.interpolator_range, 1.0)
 
@@ -150,20 +172,29 @@ class GlobalEnvironmentSystem(System, IDecodable, ILoggable):
         min_r, max_r = GlobalEnvironmentSystem.calcMinMaxGlobalVals(env_comp.start_rainfall, env_comp.end_rainfall,
                                                                     percentage, self.rainfall_dict)
 
+        # Set Solar
+        min_s, max_s = GlobalEnvironmentSystem.calcMinMaxGlobalVals(env_comp.start_solar, env_comp.end_solar,
+                                                                    percentage, self.rainfall_dict)
+
         # Calculate the rainfall and temperature values for each month
         for i in range(12):
             env_comp.temp.append(self.model.random.uniform(min_t, max_t))
             env_comp.rainfall.append(self.model.random.uniform(min_r, max_r))
+            env_comp.solar.append(self.model.random.uniform(min_s, max_s))
 
         logging.debug(self)
-        self.logger.info('GES:  {} {}'.format(
+        self.logger.info('GES:  {} {} {}'.format(
             str(np.mean(self.model.environment.getComponent(GlobalEnvironmentComponent).temp)),
-            str(np.mean(self.model.environment.getComponent(GlobalEnvironmentComponent).rainfall))))
+            str(np.mean(self.model.environment.getComponent(GlobalEnvironmentComponent).rainfall)),
+            str(np.mean(self.model.environment.getComponent(GlobalEnvironmentComponent).solar))
+        ))
 
     def __str__(self):
-        return 'Global_Properties:\n\nTemperatures: {}C\nRainfall: {}mm'.format(
+        return 'Global_Properties:\n\nTemperatures: {}C\nRainfall: {}mm\n Solar: {}MJ/m^2'.format(
             self.model.environment.getComponent(GlobalEnvironmentComponent).temp,
-            self.model.environment.getComponent(GlobalEnvironmentComponent).rainfall)
+            self.model.environment.getComponent(GlobalEnvironmentComponent).rainfall,
+            self.model.environment.getComponent(GlobalEnvironmentComponent).solar
+        )
 
 
 class SoilMoistureSystem(System, IDecodable):
@@ -238,6 +269,7 @@ class VegetationGrowthSystem(System, IDecodable):
                                                         self.model.environment[VegetationGrowthComponent],
                                                         self.model.environment[SoilMoistureComponent],
                                                         self.model.environment[GlobalEnvironmentComponent],
+                                                        self.model.cellSize ** 2,
                                                         self.model.random)]
         else:
 
