@@ -1,8 +1,8 @@
-import statistics
-
+import json
+import logging
 import math
 import numpy as np
-import json
+import statistics
 import time
 
 from ECAgent.Core import *
@@ -505,7 +505,7 @@ class SettlementRelationshipComponent(Component):
         """Returns the Standard Deviation of the House Learning Rate for all Households that are in settlement sID """
         if len(self.settlements[sID].occupants) < 2:
             return 0.0
-        return statistics.stdev(
+        return np.std(
             [self.model.environment.getAgent(h)[HouseholdPreferenceComponent].learning_rate
              for h in self.settlements[sID].occupants
              if self.model.environment.getAgent(h).hasComponent(HouseholdPreferenceComponent)]
@@ -517,7 +517,7 @@ class SettlementRelationshipComponent(Component):
                 for h in self.settlements[sID].occupants
                 if self.model.environment.getAgent(h).hasComponent(HouseholdPreferenceComponent)]
 
-        return statistics.stdev(vals) if sum(vals) > 0.0 and len(vals) > 1 else 0.0
+        return np.std(vals) if sum(vals) > 0.0 and len(vals) > 1 else 0.0
 
     def get_farm_utility_std(self, sID):
         """Returns the Standard Deviation of the House Farm Utility for all Households that are in settlement sID """
@@ -525,14 +525,14 @@ class SettlementRelationshipComponent(Component):
                 for h in self.settlements[sID].occupants
                 if self.model.environment.getAgent(h).hasComponent(HouseholdPreferenceComponent)]
 
-        return statistics.stdev(vals) if sum(vals) > 0.0 and len(vals) > 1 else 0.0
+        return np.std(vals) if sum(vals) > 0.0 and len(vals) > 1 else 0.0
 
     def get_peer_transfer_std(self, sID):
         """Returns the Standard Deviation of the House Peer Resource Transfer Chance for all Households
         that are in settlement sID """
         if len(self.settlements[sID].occupants) < 2:
             return 0.0
-        return statistics.stdev(
+        return np.std(
             [self.model.environment.getAgent(h)[HouseholdRelationshipComponent].peer_resource_transfer_chance
              for h in self.settlements[sID].occupants
              if self.model.environment.getAgent(h).hasComponent(HouseholdRelationshipComponent)]
@@ -543,7 +543,7 @@ class SettlementRelationshipComponent(Component):
         that are in settlement sID """
         if len(self.settlements[sID].occupants) < 2:
             return 0.0
-        return statistics.stdev(
+        return np.std(
             [self.model.environment.getAgent(h)[HouseholdRelationshipComponent].sub_resource_transfer_chance
              for h in self.settlements[sID].occupants
              if self.model.environment.getAgent(h).hasComponent(HouseholdRelationshipComponent)]
@@ -555,7 +555,7 @@ class SettlementRelationshipComponent(Component):
         if len(self.settlements[sID].occupants) < 2:
             return 0.0
 
-        return statistics.stdev(
+        return np.std(
             [self.model.environment.getAgent(h)[IEComponent].conformity
              for h in self.settlements[sID].occupants
              if self.model.environment.getAgent(h).hasComponent(IEComponent)]
@@ -1533,7 +1533,7 @@ class AgentIEAdaptationSystem(System, IDecodable, ILoggable):
             if self.model.random.random() < AgentIEAdaptationSystem.influence_rate:
                 # Choose which belief space is going to influence the agent
                 # First we check for novelty
-                if self.model.random.random() < AgentIEAdaptationSystem.novelty_rate:
+                if self.model.random.random() < IEComponent.mutation_rate:
                     index = self.model.random.randint(0, 6)
 
                     if index == 0:  # Peer Transfer

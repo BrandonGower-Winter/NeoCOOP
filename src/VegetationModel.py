@@ -1,4 +1,6 @@
+import logging
 import math
+import NeoCOOP
 import numpy as np
 
 from ECAgent.Core import *
@@ -6,7 +8,6 @@ from ECAgent.Environments import *
 from ECAgent.Decode import *
 from ECAgent.Collectors import Collector
 
-from main import GECCOModel
 from Logging import ILoggable
 
 # Cython Modules
@@ -225,7 +226,7 @@ class SoilMoistureSystem(System, IDecodable):
 
     def execute(self):
 
-        if GECCOModel.pool is None:
+        if NeoCOOP.NeoCOOP.pool is None:
             outputs = [CSoilMoistureSystemFunctions.SMProcess(self.model.environment.cells,
                                                   self.model.environment[SoilMoistureComponent],
                                                   self.model.environment[GlobalEnvironmentComponent])]
@@ -236,7 +237,7 @@ class SoilMoistureSystem(System, IDecodable):
             sm_comp = [self.model.environment[SoilMoistureComponent] for i in range(self.model.pool_count)]
             gec = [self.model.environment[GlobalEnvironmentComponent] for i in range(self.model.pool_count)]
 
-            outputs = GECCOModel.pool.starmap(CSoilMoistureSystemFunctions.SMProcess, zip(dfs, sm_comp, gec))
+            outputs = NeoCOOP.NeoCOOP.pool.starmap(CSoilMoistureSystemFunctions.SMProcess, zip(dfs, sm_comp, gec))
 
         final_list = np.concatenate(outputs)
 
@@ -264,7 +265,7 @@ class VegetationGrowthSystem(System, IDecodable):
 
     def execute(self):
 
-        if GECCOModel.pool is None:
+        if NeoCOOP.NeoCOOP.pool is None:
             outputs = [CVegetationGrowthSystemFunctions.VGProcess(self.model.environment.cells,
                                                         self.model.environment[VegetationGrowthComponent],
                                                         self.model.environment[SoilMoistureComponent],
@@ -295,7 +296,7 @@ class VegetationGrowthSystem(System, IDecodable):
                 gec.append(self.model.environment[GlobalEnvironmentComponent])
                 randoms.append(self.model.random)
 
-            outputs = GECCOModel.pool.starmap(CVegetationGrowthSystemFunctions.VGProcess,
+            outputs = NeoCOOP.NeoCOOP.pool.starmap(CVegetationGrowthSystemFunctions.VGProcess,
                                               zip(dfs, vg_comp, sm_comp, gec, randoms))
 
         final_veg_list = np.concatenate([o[0] for o in outputs])
