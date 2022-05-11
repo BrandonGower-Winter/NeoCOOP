@@ -4,7 +4,8 @@
   "custom_params" : {},
 
   "model" : {
-    "name" : "GECCOModel",
+    "name" : "NeoCOOP",
+    "module" : "NeoCOOP",
     "params" : {
       "iterations": 10000,
       "img_height" : 100,
@@ -41,7 +42,7 @@
         },
         "rainfall_dict": {
           "id": "cosine",
-          "frequency": 1000,
+          "frequency": 3,
           "k": 1,
           "m": 1
         },
@@ -104,11 +105,11 @@
       "params" :
       {
         "id": "IEAS",
-        "influence_rate": 0.05,
+        "influence_rate": 0.1,
         "priority": 7,
         "influence_type": "AVG",
         "persist_belief_space": true,
-        "frequency": 10
+        "frequency": 15
       }
     },
     {
@@ -163,14 +164,15 @@
         "move_lookback": 3,
         "load_difference": 0.6,
         "init_preference": 250,
-        "learning_rate_range": [0.01, 0.1],
-        "conformity_range": [0.01, 0.1],
-        "mutation_rate": 0.05,
+        "learning_rate_range": [0.15, 0.7],
+        "conformity_range": [0.15, 0.7],
+        "mutation_rate": 0.1,
         "b": 1.5,
         "m": 0.005
       },
       "post_agent_init": {
         "func": "init_settlements",
+        "module": "NeoCOOP",
         "params": {
           "strategy": "random"
         }
