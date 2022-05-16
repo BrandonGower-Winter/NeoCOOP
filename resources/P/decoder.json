@@ -28,7 +28,7 @@
         "priority" : 10,
         "start_temp" : [13,27],
         "end_temp" : [13,27],
-        "start_rainfall" : [32, 42],
+        "start_rainfall" : [0, 10],
         "end_rainfall" : [0, 10],
         "start_solar" : [18.67, 21.78],
         "end_solar" : [18.67, 21.78],
@@ -41,8 +41,8 @@
           "m": 1
         },
         "rainfall_dict": {
-          "id": "cosine",
-          "frequency": 2500,
+          "id": "linear",
+          "frequency": 1,
           "k": 1,
           "m": 1
         },
