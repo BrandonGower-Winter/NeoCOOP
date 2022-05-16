@@ -11,15 +11,13 @@ from Progress import progress
 
 
 def gini(data):
-
     x = [val[0] + val[1] for val in data]
 
-    # Mean Absolute Difference
-    mad = np.abs(np.subtract.outer(x, x)).mean()
-    # Relative Mean Absolute difference
-    rmad = mad / np.mean(x)
-
-    return 0.5 * rmad
+    sorted_x = np.sort(np.array(x))
+    n = len(x)
+    cumx = np.cumsum(sorted_x, dtype=float)
+    # The above formula, with all weights equal to 1 simplifies to:
+    return (n + 1 - 2 * np.sum(cumx) / cumx[-1]) / n
 
 
 def get_json_iteration(filename: str) -> int:
@@ -161,14 +159,17 @@ def main():
                 to_write[runs[i]] = {}
                 # Get all agent json files in this simulation run
                 agent_snapshots = load_json_files(str(scenario_path) + '/' + runs[i] + '/agents')
-                log_file = log_file_to_list(str(scenario_path) + '/' + runs[i] + '/events.log')
 
                 to_write[runs[i]]['resources'] = get_composite_property_as_dict(agent_snapshots, ['resources'],
                                                                                 [('mean', statistics.mean),
                                                                                  ('total', sum)])
 
-                to_write[runs[i]]['gini'] = get_composite_property_as_dict(agent_snapshots, ['resources', 'load'],
-                                                                                [('gini', gini)])
+                to_write[runs[i]]['load'] = get_composite_property_as_dict(agent_snapshots, ['load'],
+                                                                                [('mean', statistics.mean),
+                                                                                 ('total', sum)])
+
+                to_write[runs[i]]['inequality'] = get_composite_property_as_dict(agent_snapshots, ['resources', 'load'],
+                                                                                 [('gini', gini)])
 
                 to_write[runs[i]]['population'] = get_composite_property_as_dict(agent_snapshots, ['occupants'],
                                                                                  [('number', len),
@@ -181,20 +182,9 @@ def main():
                 to_write[runs[i]]['sub_transfer'] = get_composite_property_as_dict(agent_snapshots, ['sub_chance'],
                                                                                    [('mean', statistics.mean),
                                                                                     ('dist', bin01)])
+
                 to_write[runs[i]]['settlements'] = get_composite_property_as_dict(agent_snapshots, ['settlement_id'],
                                                                                   [('count', unq)])
-
-                to_write[runs[i]]['logs'] = {
-                    'AUTH': [
-                        (x['HOUSEHOLD.RESOURCES.TRANSFER.AUTH'] if 'HOUSEHOLD.RESOURCES.TRANSFER.AUTH' in x else 0)
-                        for x in log_file],
-                    'PEER': [
-                        (x['HOUSEHOLD.RESOURCES.TRANSFER.PEER'] if 'HOUSEHOLD.RESOURCES.TRANSFER.PEER' in x else 0)
-                        for x in log_file],
-                    'SUB': [
-                        (x['HOUSEHOLD.RESOURCES.TRANSFER.SUB'] if 'HOUSEHOLD.RESOURCES.TRANSFER.SUB' in x else 0)
-                        for x in log_file]
-                }
 
                 gc.collect()
             print()

@@ -15,9 +15,11 @@ import os
 matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['ps.fonttype'] = 42
 
-array_size = 4000
+array_size = 2000
 iteration_multiplier = 5
-runs_count = 10
+runs_count = 50
+
+plots_ids = ['N', '1', '2', '4', '8', '16', '32', 'P']
 
 def get_scenario_data(runs: {}):
 
@@ -43,23 +45,18 @@ def get_scenario_data(runs: {}):
             placeholder_pop[i][index] = runs[seed]['population']['total'][i]
             peer_placeholder[i][index] = runs[seed]['peer_transfer']['mean'][i]
             sub_placeholder[i][index] = runs[seed]['sub_transfer']['mean'][i]
-            gini_pop[i][index] = runs[seed]['gini']['gini'][i]
+            gini_pop[i][index] = np.nan_to_num(runs[seed]['inequality']['gini'][i])
             settlements_pop[i][index] = runs[seed]['settlements']['count'][i]
 
-            peer_dst_placeholder[i][index] = np.array(runs[seed]['peer_transfer']['dist'][i])
-            sub_dst_placeholder[i][index] = np.array(runs[seed]['sub_transfer']['dist'][i])
-
-        for i in range(array_size * iteration_multiplier):
-            auth_requests[i][index] = runs[seed]['logs']['AUTH'][i]
-            sub_requests[i][index] = runs[seed]['logs']['SUB'][i]
-            peer_requests[i][index] = runs[seed]['logs']['PEER'][i]
+            peer_dst_placeholder[i][index] = np.nan_to_num(np.array(runs[seed]['peer_transfer']['dist'][i]))
+            sub_dst_placeholder[i][index] = np.nan_to_num(np.array(runs[seed]['sub_transfer']['dist'][i]))
 
         index += 1
         runs_processed += 1
         if runs_processed > runs_count:
             break
 
-    line_data = np.zeros((21, array_size), dtype=float)
+    line_data = np.zeros((25, array_size), dtype=float)
     bar_data = np.zeros((2, 3, 10), dtype=float)
     stats_data = np.zeros((3,runs_count), dtype=float)
     population_data = placeholder
@@ -77,11 +74,11 @@ def get_scenario_data(runs: {}):
         line_data[4][i] = np.mean(sub_placeholder[i]) * 100.0
         line_data[5][i] = np.std(sub_placeholder[i]) * 100.0
 
-        temp = (peer_placeholder[i] - peer_placeholder[0])/(peer_placeholder[0]) * 100.0
+        temp = np.abs(peer_placeholder[i] - peer_placeholder[0])/(peer_placeholder[0]) * 100.0
         line_data[6][i] = np.mean(temp)
         line_data[7][i] = np.std(temp)
 
-        temp = (sub_placeholder[i] - sub_placeholder[0])/(sub_placeholder[0]) * 100.0
+        temp = np.abs(sub_placeholder[i] - sub_placeholder[0])/(sub_placeholder[0]) * 100.0
         line_data[8][i] = np.mean(temp)
         line_data[9][i] = np.std(temp)
 
@@ -89,35 +86,44 @@ def get_scenario_data(runs: {}):
         line_data[10][i] = np.mean(temp)
         line_data[11][i] = np.std(temp)
 
-        temp = (peer_placeholder[i][mask] - sub_placeholder[i][mask])
+        temp = peer_placeholder[i][mask]
         line_data[12][i] = np.mean(temp)
         line_data[13][i] = np.std(temp)
 
-        temp = (peer_placeholder[i][~mask] - sub_placeholder[i][~mask])
+        temp = sub_placeholder[i][mask]
         line_data[14][i] = np.mean(temp)
         line_data[15][i] = np.std(temp)
 
-        line_data[16][i] = np.mean(gini_pop[i])
-        line_data[17][i] = np.std(gini_pop[i])
+        temp = peer_placeholder[i][~mask]
+        line_data[16][i] = np.mean(temp)
+        line_data[17][i] = np.std(temp)
 
-        line_data[18][i] = stats.shapiro(placeholder[i]).pvalue
+        temp = sub_placeholder[i][~mask]
+        line_data[18][i] = np.mean(temp)
+        line_data[19][i] = np.std(temp)
 
-        temp = settlements_pop[i]
-        line_data[19][i] = line_data[0][i] / np.mean(temp)
-        line_data[20][i] = line_data[1][i] / np.std(temp)
+        line_data[20][i] = stats.shapiro(placeholder[i]).pvalue
+
+        line_data[21][i] = line_data[0][i] / np.mean(temp)
+        line_data[22][i] = line_data[1][i] / np.std(temp)
+
+        temp =  line_data[0][i] / np.mean(settlements_pop[i])
+        line_data[23][i] = np.mean(temp)
+
+        line_data[24][i] = np.mean(gini_pop[i])
 
         if i == 0:
             bar_data[0][0] = np.mean(peer_dst_placeholder[i], axis=0)
             bar_data[1][0] = np.mean(sub_dst_placeholder[i], axis=0)
-        elif i == 1999:
+        elif i == 999:
             bar_data[0][1] = np.mean(peer_dst_placeholder[i], axis=0)
             bar_data[1][1] = np.mean(sub_dst_placeholder[i], axis=0)
-        elif i == 3999:
+        elif i == 1999:
             bar_data[0][2] = np.mean(peer_dst_placeholder[i], axis=0)
             bar_data[1][2] = np.mean(sub_dst_placeholder[i], axis=0)
 
-        if i == 3999:
-            stats_data[0] = placeholder[i]
+        if i > 1198:
+            stats_data[0] += placeholder[i]
             stats_data[1] = peer_placeholder[i]
             stats_data[2] = sub_placeholder[i]
 
@@ -170,28 +176,26 @@ def write_plot(agent_types: [], filename, data, title: str, index: [int], x_axis
 
 
 def write_bar_plot(key, filename, data, title: str, x_axis: str, y_axis: str,
-               legend: str = 'lower right'):
+               legend: str = 'upper right'):
 
     divide_arr = ['beginning', 'middle', 'end']
 
-    fig, ax = pyplot.subplots(1, 3)
+    fig, ax = pyplot.subplots()
     bins = ['0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9', '1.0']
     x_bins = np.arange(len(bins))
-    for index in range(3):
-        ax[index].set_title(title % (divide_arr[index], key))
-        ax[index].set_xlabel(x_axis)
-        ax[index].set_ylabel(y_axis)
+    ax.set_title(title)
+    ax.set_xlabel(x_axis)
+    ax.set_ylabel(y_axis)
 
-        ax[index].bar(x_bins - 0.2, data[0][index], 0.4, label='Peer')
-        ax[index].bar(x_bins + 0.2, data[1][index], 0.4, label="Sub")
+    ax.bar(x_bins - 0.2, data[0][2], 0.4, label='Peer')
+    ax.bar(x_bins + 0.2, data[1][2], 0.4, label="Sub")
 
-        ax[index].set_xticks(x_bins, bins)
-        ax[index].set_yticks(np.arange(0.0, 0.7, 0.1)) # setting the ticks
+    ax.set_xticks(x_bins, bins)
+    ax.set_yticks(np.arange(0.0, 0.6, 0.1)) # setting the ticks
 
-        ax[index].legend(loc=legend)
-        ax[index].set_aspect('auto')
+    ax.legend(loc=legend)
+    ax.set_aspect('auto')
 
-    fig.set_size_inches(18.5, 10.5)
     fig.savefig(filename)
     pyplot.close(fig)
 
@@ -227,282 +231,84 @@ def main():
     for a in data:
         data_types[a] = ['Peer', 'Sub']
 
-    write_plot(['R-HIGH', 'F-HIGH', 'A-HIGH', 'S-HIGH'], '%s/population/HIGH_households' % parser.output, data,
-               'Total Population of Initial Peer / Sub Distributions for \nHIGH Frequency Environmental Stress Scenarios.',
-               [0], 'Iteration', 'Population')
-    write_plot(['R-LOW', 'F-LOW', 'A-LOW', 'S-LOW'], '%s/population/LOW_households' % parser.output, data,
-               'Total Population of Initial Peer / Sub Distributions for \nLOW Frequency Environmental Stress Scenarios.',
-               [0], 'Iteration', 'Population')
-    write_plot(['R-MED', 'F-MED', 'A-MED', 'S-MED'], '%s/population/MED_households' % parser.output, data,
-               'Total Population of Initial Peer / Sub Distributions for \nMED Environmental Stress Scenarios.',
-               [0], 'Iteration', 'Population')
+    write_plot(plots_ids, '%s/population/HIGH_households' % parser.output, data,
+               '', [0], 'Iteration (Year)', 'Population (Households)', legend='upper left')
 
-    # Resource Trading Beliefs
-    write_plot(['A-HIGH', 'A-MED', 'A-LOW'], '%s/transfer_chance/A_peer' % parser.output, data,
-               None,
-               [2], 'Iteration', 'Peer Resource Transfer Probability (%)', legend='lower left')
-    write_plot(['A-HIGH', 'A-MED', 'A-LOW'], '%s/transfer_chance/A_sub' % parser.output, data,
-               None,
-               [4], 'Iteration', 'Sub Resource Transfer Probability (%)', legend='lower left')
+    write_plot(plots_ids, '%s/settlements/settlement_density' % parser.output, data,
+               '', [23], 'Iteration (Year)', 'Households per Settlement', legend='upper right')
 
-    write_plot(['A-HIGH', 'A-MED', 'A-LOW'], '%s/transfer_chance/A' % parser.output, data,
-               None,
-               [2, 4], 'Iteration', 'Resource Transfer Probability (%)', legend='lower left', data_types=data_types)
+    write_plot(plots_ids, '%s/gini/inequality' % parser.output, data,
+               '', [24], 'Iteration (Year)', 'Gini Index', legend='upper left')
 
-    write_plot(['F-80','F-HIGH', 'F-48', 'F-MED', 'F-LOW', 'F-8'], '%s/transfer_chance/F_peer' % parser.output, data,
-               None,
-               [2], 'Iteration', 'Peer Resource Transfer Probability (%)', legend='lower left')
-    write_plot(['F-80','F-HIGH', 'F-48', 'F-MED', 'F-LOW', 'F-8'], '%s/transfer_chance/F_sub' % parser.output, data,
-               None,
-               [4], 'Iteration', 'Sub Resource Transfer Probability (%)', legend='lower left')
+    peer_heatmaps = np.zeros((len(plots_ids), 7))
+    sub_heatmaps = np.zeros((len(plots_ids), 7))
 
-    write_plot(['F-HIGH', 'F-MED', 'F-LOW'], '%s/transfer_chance/F' % parser.output, data,
-               None,
-               [2, 4], 'Iteration', 'Resource Transfer Probability (%)', legend='lower left', data_types=data_types)
+    for i, id in enumerate(plots_ids):
+        peer_heatmaps[i] = bar_data[id][0][2][1:8]
+        sub_heatmaps[i] = bar_data[id][1][2][1:8]
 
-    write_plot(['R-HIGH', 'R-MED', 'R-LOW'], '%s/transfer_chance/R_peer' % parser.output, data,
-               None,
-               [2], 'Iteration', 'Peer Resource Transfer Probability (%)', legend='lower left')
-    write_plot(['R-HIGH', 'R-MED', 'R-LOW'], '%s/transfer_chance/R_sub' % parser.output, data,
-               None,
-               [4], 'Iteration', 'Sub Resource Transfer Probability (%)', legend='lower left')
+    from scipy.ndimage.filters import gaussian_filter
 
-    write_plot(['R-HIGH', 'R-MED', 'R-LOW'], '%s/transfer_chance/R' % parser.output, data,
-               None,
-               [2, 4], 'Iteration', 'Resource Transfer Probability (%)', legend='lower left', data_types=data_types)
+    x_labels = plots_ids
+    y_labels = ['11-20', '21-30', '31-40', '41-50', '51-60', '61-70', '71-80']
 
-    write_plot(['S-HIGH', 'S-MED', 'S-LOW'], '%s/transfer_chance/S_peer' % parser.output, data,
-               None,
-               [2], 'Iteration', 'Peer Resource Transfer Probability (%)', legend='lower right')
-    write_plot(['S-HIGH', 'S-MED', 'S-LOW'], '%s/transfer_chance/S_sub' % parser.output, data,
-               None,
-               [4], 'Iteration', 'Sub Resource Transfer Probability (%)', legend='lower right')
+    max_labels = np.round(np.linspace(0.0, 0.5, 11), 2)
 
-    write_plot(['S-HIGH', 'S-MED', 'S-LOW'], '%s/transfer_chance/S' % parser.output, data,
-               None,
-               [2, 4], 'Iteration', 'Resource Transfer Probability (%)', legend='lower left', data_types=data_types)
+    fig, ax = pyplot.subplots()
+    ax.set_title('')
+    ax.set_xlabel('Stress Scenario')
+    ax.set_ylabel('Peer Transfer Property (%)')
 
+    ax.set_xticklabels(x_labels)
+    ax.set_yticklabels(y_labels)
 
-    write_plot(['R-HIGH', 'F-HIGH', 'A-HIGH', 'S-HIGH'], '%s/population/HIGH_population' % parser.output, data,
-               'Total Population of Initial Peer / Sub Distributions for \nHIGH Frequency Environmental Stress Scenarios.',
-               [10], 'Iteration', 'Population')
-    write_plot(['R-LOW', 'F-LOW', 'A-LOW', 'S-LOW'], '%s/population/LOW_population' % parser.output, data,
-               'Total Population of Initial Peer / Sub Distributions for \nLOW Frequency Environmental Stress Scenarios.',
-               [10], 'Iteration', 'Population')
-    write_plot(['R-MED', 'F-MED', 'A-MED', 'S-MED'], '%s/population/MED_population' % parser.output, data,
-               'Total Population of Initial Peer / Sub Distributions for \nMED Environmental Stress Scenarios.',
-               [10], 'Iteration', 'Population')
+    # Generate the pix map
+    plot = ax.contourf(np.transpose(peer_heatmaps), max_labels, cmap='hot')#, vmin=max_labels[i][0], vmax=max_labels[i][1])
+    fig.colorbar(plot)
+    ax.set_aspect('auto')
 
-    write_plot(['R-HIGH', 'F-HIGH', 'A-HIGH', 'S-HIGH'], '%s/gini/HIGH_gini' % parser.output, data,
-               'Social Status Gini-Index for HIGH Frequency Environmental Stress Scenarios.',
-               [16], 'Iteration', 'Gini')
-    write_plot(['R-LOW', 'F-LOW', 'A-LOW', 'S-LOW'], '%s/gini/LOW_gini' % parser.output, data,
-               'Social Status Gini-Index for LOW Frequency Environmental Stress Scenarios.',
-               [16], 'Iteration', 'Gini')
-    write_plot(['R-MED', 'F-MED', 'A-MED', 'S-MED'], '%s/gini/MED_gini' % parser.output, data,
-               'Social Status Gini-Index for MED Frequency Environmental Stress Scenarios.',
-               [16], 'Iteration', 'Gini')
+    fig.savefig('%s/peer_heatmap' % parser.output)
+    pyplot.close(fig)
 
-    write_plot(['F-HIGH', 'F-MED', 'F-LOW'], '%s/settlements/%s_count' % (parser.output, 'F'), data,
-               'Number of Settlements for %s Agent-Type' % 'F',
-               [19], 'Iteration', 'Settlements', legend='center right')
+    fig, ax = pyplot.subplots()
+    ax.set_title('')
+    ax.set_xlabel('Stress Scenario')
+    ax.set_ylabel('Subordinate Transfer Property (%)')
 
-    write_plot(['A-HIGH', 'A-MED', 'A-LOW'], '%s/settlements/%s_count' % (parser.output, 'A'), data,
-               'Number of Settlements for %s Agent-Type' % 'A',
-               [19], 'Iteration', 'Settlements', legend='center right')
+    ax.set_xticklabels(x_labels)
+    ax.set_yticklabels(y_labels)
 
-    write_plot(['R-HIGH', 'R-MED', 'R-LOW'], '%s/settlements/%s_count' % (parser.output, 'R'), data,
-               'Number of Settlements for %s Agent-Type' % 'R',
-               [19], 'Iteration', 'Settlements', legend='center right')
+    # Generate the pix map
+    plot = ax.contourf(np.transpose(sub_heatmaps), max_labels, cmap='bone')#, vmin=max_labels[i][0], vmax=max_labels[i][1])
+    fig.colorbar(plot)
+    ax.set_aspect('auto')
 
-    write_plot(['S-HIGH', 'S-MED', 'S-LOW'], '%s/settlements/%s_count' % (parser.output, 'S'), data,
-               'Number of Settlements for %s Agent-Type' % 'S',
-               [19], 'Iteration', 'Settlements', legend='center right')
-
-    write_plot(['A-HIGH', 'F-HIGH', 'R-HIGH', 'S-HIGH'], '%s/settlements/%s_count' % (parser.output, 'HIGH'), data,
-               'Mean Settlement Density for %s Scenario' % 'HIGH',
-               [19], 'Iteration', 'Settlements', legend='center right')
-    write_plot(['A-MED', 'F-MED', 'R-MED', 'S-MED'], '%s/settlements/%s_count' % (parser.output, 'MED'), data,
-               'Mean Settlement Density for %s Scenario' % 'MED',
-               [19], 'Iteration', 'Households per Settlement', legend='center right')
-
-    temp_settlement_data = {}
-    for a in ['A-LOW', 'F-LOW', 'R-LOW', 'S-LOW']:
-        temp_settlement_data[a] = [data[a][19][1500:2500]]
+    fig.savefig('%s/sub_heatmap' % parser.output)
+    pyplot.close(fig)
 
 
-    write_plot(['A-LOW', 'F-LOW', 'R-LOW', 'S-LOW'], '%s/settlements/%s_count' % (parser.output, 'LOW'), temp_settlement_data,
-               'Mean Settlement Density for %s Scenario' % 'LOW',
-               [0], 'Iteration', 'Households per Settlement',  iterations=np.linspace(7500, 12500, 1000),
-               legend='center right')
+    gini_heatmaps = np.zeros((len(plots_ids), 2000))
+    y_labels = ['0', '', '2000', '', '4000', '', '6000', '', '8000', '', '10000']
 
-    temp_log_data = {}
-    write_plot(['A-HIGH', 'F-HIGH', 'R-HIGH', 'S-HIGH'], '%s/actions/%s_sub_actions' % (parser.output, 'HIGH'), log_data,
-               'Number of Resource Transfer Actions\n for Scenario %s' % 'HIGH',
-               [0], 'Iteration', 'Count', iterations=np.arange(20000))
-
-    for a in ['A-MED', 'F-MED', 'R-MED', 'S-MED']:
-        temp_log_data[a] = [log_data[a][0][9000:11000] + log_data[a][2][9000:11000] + log_data[a][4][9000:11000]]
-
-    write_plot(['A-MED', 'F-MED', 'R-MED', 'S-MED'], '%s/actions/%s_sub_actions' % (parser.output, 'MED'), temp_log_data,
-               'Number of Resource Transfer Actions\n for %s Scenarios' % 'MED',
-               [0], 'Iteration', 'Count', iterations=np.linspace(9000, 11000, 2000), legend='upper right')
-
-    for a in['A-LOW', 'F-LOW', 'R-LOW', 'S-LOW']:
-        temp_log_data[a] = [log_data[a][0][10000:12000] + log_data[a][2][10000:12000] + log_data[a][4][10000:12000]]
-
-    write_plot(['A-LOW', 'F-LOW', 'R-LOW', 'S-LOW'], '%s/actions/%s_sub_actions' % (parser.output, 'LOW'), temp_log_data,
-               'Number of Resource Transfer Actions\n for Scenario %s' % 'LOW', [0],
-               'Iteration', 'Count', iterations=np.linspace(10000, 12000, 2000), legend='upper right')
-
-    p_dict = {'LOW': [np.zeros(4000, dtype=float), np.zeros(4000, dtype=float)], 'MED': [np.zeros(4000, dtype=float),
-                        np.zeros(4000, dtype=float)], 'HIGH': [np.zeros(4000, dtype=float),np.zeros(4000, dtype=float)]}
-    pA_LOW = []
-    pA_MED = []
-    pS_LOW = []
-    pS_MED = []
-    pS_HIGH = []
-
-    for i in range(4000):
-        p_dict['LOW'][0][i] = min(0.1, stats.ranksums(pop_data['S-LOW'][i], pop_data['A-LOW'][i], alternative='greater').pvalue)
-        if p_dict['LOW'][0][i] < 0.1:
-            pS_LOW.append(i)
-        p_dict['MED'][0][i] = min(0.1, stats.ranksums(pop_data['S-MED'][i], pop_data['A-MED'][i], alternative='greater').pvalue)
-        if p_dict['MED'][0][i] < 0.1:
-            pS_MED.append(i)
-        p_dict['HIGH'][0][i] = min(0.1, stats.ranksums(pop_data['S-HIGH'][i], pop_data['A-HIGH'][i], alternative='greater').pvalue)
-        if p_dict['HIGH'][0][i] < 0.1:
-            pS_HIGH.append(i)
-        p_dict['LOW'][1][i] = min(0.1, stats.ranksums(pop_data['A-LOW'][i], pop_data['S-LOW'][i], alternative='greater').pvalue)
-        if p_dict['LOW'][1][i] < 0.1:
-            pA_LOW.append(i)
-        p_dict['MED'][1][i] = min(0.1, stats.ranksums(pop_data['A-MED'][i], pop_data['S-MED'][i], alternative='greater').pvalue)
-        if p_dict['MED'][1][i] < 0.1:
-            pA_MED.append(i)
-        p_dict['HIGH'][1][i] = min(0.1, stats.ranksums(pop_data['A-HIGH'][i], pop_data['S-HIGH'][i], alternative='greater').pvalue)
-
-    print('P-Values:')
-    print('S-LOW: %s' % pS_LOW)
-    print('S-MED: %s' % pS_MED)
-    print('S-HIGH: %s' % pS_HIGH)
-    print('A-LOW: %s' % pA_LOW)
-    print('A-MED: %s' % pA_MED)
-    print()
-    write_plot(['HIGH', 'MED', 'LOW'], '%s/population/s_pop_comp' % parser.output, p_dict,
-               'P-Values for Pop Comp', [0], 'Iteration', 'p')
-    write_plot(['HIGH', 'MED', 'LOW'], '%s/population/a_pop_comp' % parser.output, p_dict,
-               'P-Values for Pop Comp', [1], 'Iteration', 'p')
-
-    relative_scenario_keys =[
-        ['A-HIGH', 'F-HIGH', 'R-HIGH', 'S-HIGH'],
-        ['A-MED', 'F-MED', 'R-MED', 'S-MED'],
-        ['A-LOW', 'F-LOW', 'R-LOW', 'S-LOW']
-    ]
-
-    for key in relative_scenario_keys:
-
-        temp_data = np.zeros((4, array_size))
-
-        for a_type in key:
-            temp_data[0] += data[a_type][6]
-            temp_data[1] += data[a_type][7]
-            temp_data[2] += data[a_type][8]
-            temp_data[3] += data[a_type][9]
-
-        temp_data /= len(key)
-
-        name = key[0][2:]
-
-        temp_data = {name: temp_data}
-
-        write_plot([name], '%s/transfer_difference/%s_transfer_difference' % (parser.output, name),
-               temp_data,
-               'Relative Change in Peer and Sub Transfer properties\nfor %s Frequency Scenarios' % name,
-               [0, 2], 'Iteration', '%', data_types={name: ['Peer', 'Sub']},
-               show_std=1, legend='lower left')
+    for i, id in enumerate(plots_ids):
+        gini_heatmaps[i] = data[id][24]
 
 
-    #as_combo = np.zeros((4, array_size))
-    hkeys =[
-        ['A-LOW', 'A-MED', 'A-HIGH'],
-        ['F-LOW', 'F-MED', 'F-HIGH'],
-        ['R-LOW', 'R-MED', 'R-HIGH'],
-        ['S-LOW', 'S-MED', 'S-HIGH']
-   ]
+    fig, ax = pyplot.subplots()
+    ax.set_title('')
+    ax.set_xlabel('Iterations (Year)')
+    ax.set_ylabel('Gini Index')
 
-    peer_heatmaps = np.zeros((4, 3, array_size))
-    sub_heatmaps = np.zeros((4, 3, array_size))
+    ax.set_xticklabels(y_labels)
+    ax.set_yticklabels([''] + x_labels)
 
-    for i in range(len(hkeys)):
-        for j in range(len(hkeys[i])):
-            peer_heatmaps[i][j] = data[hkeys[i][j]][2]
-            sub_heatmaps[i][j] = data[hkeys[i][j]][4]
+    plot = ax.imshow(gini_heatmaps, cmap='gray', interpolation='none')
+    fig.colorbar(plot)
+    ax.set_aspect('auto')
 
-    x_labels = ['0', '', '5000', '', '10000', '', '15000', '', '20000']
-    y_labels = ['LOW', '', '', '', 'MED', '', '', '', 'HIGH']
-    a_type = ['A', 'F', 'R', 'S']
-    max_labels = [np.linspace(50, 65, 10), np.linspace(45, 55, 10), np.linspace(45, 55, 10), np.linspace(36, 46, 10)]
+    fig.savefig('%s/gini_heatmap' % parser.output)
+    pyplot.close(fig)
 
-    for i in range(len(hkeys)):
-        fig, ax = pyplot.subplots()
-        ax.set_title('Peer Transfer Heatmap for %s Agent Type\n Across All Environmental Stress Scenarios' % a_type[i])
-        ax.set_xlabel('Iterations')
-        ax.set_ylabel('Environmental Stress')
-
-        ax.set_xticklabels(x_labels)
-        ax.set_yticklabels(y_labels)
-
-        # Generate the pix map
-        plot = ax.contourf(peer_heatmaps[i], max_labels[i], cmap='hot')#, vmin=max_labels[i][0], vmax=max_labels[i][1])
-        fig.colorbar(plot)
-        ax.set_aspect('auto')
-
-        fig.savefig('%s/transfer_chance/%s_peer_heatmap' % (parser.output, a_type[i]))
-        pyplot.close(fig)
-
-        fig, ax = pyplot.subplots()
-        ax.set_title('Sub Transfer Heatmap for %s Agent Type\n Across All Environmental Stress Scenarios' % a_type[i])
-        ax.set_xlabel('Iterations')
-        ax.set_ylabel('Environmental Stress')
-
-        ax.set_xticklabels(x_labels)
-        ax.set_yticklabels(y_labels)
-
-        # Generate the pix map
-        plot = ax.contourf(sub_heatmaps[i], max_labels[i], cmap='winter') #vmin=max_labels[i][0], vmax=max_labels[i][1])
-        fig.colorbar(plot)
-        ax.set_aspect('auto')
-
-        fig.savefig('%s/transfer_chance/%s_sub_heatmap' % (parser.output, a_type[i]))
-        pyplot.close(fig)
-
-    #as_combo /= 2
-
-    #write_plot(['data'], '%s/%s_transfer_difference' % (parser.output, 'AS_EVO'),
-              # {'data': as_combo},
-              # 'Relative Change in Peer and Sub Transfer Properties\n Averaged Across LOW and MED Scenarios',
-               #[0, 1, 2, 3], 'Iteration', '%', data_types={'data': ['A-Peer', 'A-Sub', 'S-Peer', 'S-Sub']},
-               #legend='lower left')
-
-
-    relative_scenario_keys = [['A-HIGH', 'F-HIGH', 'R-HIGH', 'S-HIGH', 'A-MED', 'F-MED', 'R-MED', 'S-MED', 'A-LOW', 'F-LOW', 'R-LOW', 'S-LOW']]
-
-    for key in relative_scenario_keys:
-
-        temp_data = np.zeros((2, array_size * iteration_multiplier))
-
-        for a_type in key:
-            temp_data[0] += log_data[a_type][0]
-            temp_data[1] += log_data[a_type][4]
-
-        name = key[0][2:]
-
-        temp_data = {name: temp_data}
-
-        write_plot([name], '%s/actions/avg_actions' % (parser.output), temp_data,
-                   'Number of Resource Transfer Requests\nAcross All Scenarios',
-                   [1,0], 'Iteration', 'Count', data_types={name: ['Peer', 'Sub']}, legend='upper right',
-                   iterations=np.arange(array_size * iteration_multiplier))
 
     for a in data:
         write_plot([a], '%s/transfer_chance/%s_transfer_chance' % (parser.output, a), data,
@@ -514,47 +320,42 @@ def main():
                    [6, 8], 'Iteration', '%', data_types=data_types,
                    show_std=1)
 
-        write_plot([a], '%s/relative_prop_diff/%s_prop_difference' % (parser.output, a), data,
-                   'Relative Difference in Peer and Sub Transfer properties\n for Scenario %s' % a,
-                   [12, 14], 'Iteration', '%', data_types={a: ['Peer<Sub', 'Peer>Sub']},
-                   show_std=1)
+        write_plot([a], '%s/relative_prop_diff/%s_prop_difference_sgp' % (parser.output, a), data,
+                   'Relative Difference in Peer and Sub Transfer properties\n for Scenario %s where Sub[0] > Peer[0]' % a,
+                   [12, 14], 'Iteration', '%', data_types=data_types, show_std=1)
+
+        write_plot([a], '%s/relative_prop_diff/%s_prop_difference_pgs' % (parser.output, a), data,
+                   'Relative Difference in Peer and Sub Transfer properties\n for Scenario %s where Sub[0] < Peer[0]' % a,
+                   [16, 18], 'Iteration', '%', data_types=data_types, show_std=1)
 
         write_plot([a], '%s/actions/%s_actions' % (parser.output, a), log_data,
                    'Number of Resource Transfer Actions\n for Scenario %s' % a,
                    [0,4], 'Iteration', 'Count', data_types={a: ['Sub', 'Peer']},
-                   show_std=1, iterations=np.arange(20000))
+                   show_std=1, iterations=np.arange(10000))
 
         write_bar_plot(a, '%s/dist/%s_distribution' % (parser.output, a), bar_data[a],
-                   'Distribution of Peer and Sub Transfer properties\n at the %s of Scenario %s', 'Bins', 'Distribution (%)')
+                   'Final Distribution of Peer and Sub Transfer properties\n for Scenario %s' % a, 'Bins', 'Distribution (%)')
 
         print('%s:' % a)
-        print('%s:\n0: %s\t 10000: %s\t20000: %s' % ('Peer', data[a][2][0], data[a][2][1999] - data[a][2][0], data[a][2][3999] -data[a][2][0]))
-        print('%s:\n0: %s\t 10000: %s\t20000: %s' % ('Sub', data[a][4][0], data[a][4][1999]  - data[a][4][0], data[a][4][3999]  - data[a][4][0]))
+        print('%s:\n0: %s\t 5000: %s\t10000: %s' % ('Peer', data[a][2][0], data[a][2][999] - data[a][2][0], data[a][2][1999] -data[a][2][0]))
+        print('%s:\n0: %s\t 5000: %s\t10000: %s' % ('Sub', data[a][4][0], data[a][4][999]  - data[a][4][0], data[a][4][1999]  - data[a][4][0]))
         print('%s:\n0: %s +/- %s p:%s\t 5000: %s +/- %s p:%s\t10000: %s +/- %s p:%s' % ('Stats:', data[a][0][0], data[a][1][0], data[a][18][0],
-                                                                           data[a][0][1999], data[a][1][1999], data[a][18][1999],
-                                                                           data[a][0][3999], data[a][1][3999], data[a][18][3999]))
-        print('Ranksums:' + str(stats.ranksums(stats_data[a][1], stats_data[a][2], alternative='greater').pvalue))
+                                                                           data[a][0][999], data[a][1][999], data[a][20][999],
+                                                                           data[a][0][1999], data[a][1][1999], data[a][20][1999]))
+        print('Ranksums:' + str(stats.ranksums(stats_data[a][1], stats_data[a][2], alternative='two-sided').pvalue))
         print()
 
+
     print("Kruskal Tests:")
+    toTest = np.zeros((len(plots_ids), 50), dtype=float)
+    for i, kkey in enumerate(plots_ids):
+        toTest[i] = stats_data[kkey][0]
 
-    kruskal_keys = [
-        ['R-HIGH', 'F-HIGH', 'A-HIGH', 'S-HIGH'],
-        ['R-MED', 'F-MED', 'A-MED', 'S-MED'],
-        ['R-LOW', 'F-LOW', 'A-LOW', 'S-LOW']
-    ]
+    to_compare = [toTest[i] for i in range(len(plots_ids))]
+    print('Kruskal: ' + str(stats.kruskal(*to_compare).pvalue))
+    print(sp.posthoc_dunn(to_compare, p_adjust = 'bonferroni'))
 
-    for kkey in kruskal_keys:
-        toTest = np.zeros((4, 50), dtype=float)
-
-        toTest[0] = stats_data[kkey[0]][0]
-        toTest[1] = stats_data[kkey[1]][0]
-        toTest[2] = stats_data[kkey[2]][0]
-        toTest[3] = stats_data[kkey[3]][0]
-
-        print(kkey)
-        print('Kruskal: ' + str(stats.kruskal(toTest[0], toTest[1], toTest[2], toTest[3]).pvalue))
-        print(sp.posthoc_dunn([toTest[0], toTest[1], toTest[2], toTest[3]], p_adjust = 'bonferroni'))
+    print("\nFinal Peer:")
 
 
 if __name__ == '__main__':
