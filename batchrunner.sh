@@ -12,5 +12,5 @@ while read l; do
       total=$((total + 10))
       echo "$total Complete..."
   fi
-done <./resources/seeds.list
+done <./resources/seeds_long.list
 echo "Done!"
