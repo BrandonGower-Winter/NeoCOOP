@@ -14,11 +14,12 @@ from VegetationModel import GlobalEnvironmentSystem
 study_name = 'ABMHUB2022'
 mysql_database_name = 'mysql://root:root@localhost/' + study_name
 
+# This is just an estimate, does not need to be accurate but it makes understanding how much better the found solutions
+# are compared to your best guesses
 carry_cap = 8000
 num_iterations = 10000
-# 2 oscillates between max and min every 2 iteration
-# 3, 4, 5, 6 , 7, 10, 20 are derived from having 1-6 droughts per 20 years
-environment_frequencies = [2, 3, 4, 5, 7, 10, 20]
+# Put the scenario frequencies you want to investigate here.
+environment_frequencies = [10000, 5000, 2500, 1250, 625, 313]
 
 def objective(trial):
 
@@ -77,7 +78,7 @@ def main():
                                 load_if_exists = True)
 
     fh_logger = logging.getLogger('model')
-    fh_logger.propagate = False
+    fh_logger.propagate = False  # This is needed to prevent the terminal from being spammed with NeoCOOP logged events.
     fh_logger.setLevel(logging.WARNING)
 
     if parser.file is not None:
