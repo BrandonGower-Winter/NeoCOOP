@@ -1,7 +1,7 @@
 # NeoCOOP: Neolithic Agent Cooperation Model
 NeoCOOP is an agent-based model (ABM) designed to simulate the emergence and evolution of altruistic and selfish behaviour in Neolithic Households under varying degrees of environmental stress.
 
-![Visualization of NeoCOOP. Black pixels are settlements and gray pixels are farmland](./resources/land_ownership.jpg)
+![Visualization of NeoCOOP. Black pixels are settlements and gray pixels are farmland](./resources/land_ownership.jpeg)
 
 ## Installation
 
@@ -63,6 +63,27 @@ simulations that can run at any one time (Look inside *batchrunner.sh*)
 
 To process batch simulations, run the following:
 
-`> python3 src/collected_data_processor -p paths -o output_folder`
+`> python3 src/collected_data_processor.py -p paths -o output_folder`
 
 This will create a series of JSON files will all of a batch simulations useful information.
+
+## Plotting Graphs:
+
+While the data processed by `collected_data_processor.py` can be used to create plots of your liking,
+we do include a script `graph_plotter.py` that will produce a wide variety of graphs of interest:
+
+`> python3 src/graph_plotter.py -p path_to_processed_data -o output_folder -s none`
+
+This will produce graphs of agent resource trading beliefs, population levels, inequality, and settlement density:
+
+Agent Populations:
+![Example of Agent Populations across various scenarios](./resources/population.png)
+Resource Trading Beliefs:
+![Example of Agent Peer Transfer Beliefs across various scenarios](./resources/peer_heatmap.png)
+![Example of Agent Subordinate Transfer Beliefs across various scenarios](./resources/sub_heatmap.png)
+Gini Heatmap:
+![Example of Agent Social inequality across various scenarios](./resources/gini_heatmap.png)
+Settlement Density:
+![Example of Settlement Density across various scenarios](./resources/settlement_density.png)
+Another look at the final Resource Trading Beliefs for one scenario:
+![Example of Agent Resource Transfer Beliefs across various scenarios](./resources/P_distribution.png)
