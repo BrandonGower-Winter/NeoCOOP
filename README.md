@@ -1,5 +1,8 @@
 # NeoCOOP: Neolithic Agent Cooperation Model
-NeoCOOP is an agent-based model (ABM) designed to simulate the emergence and evolution of altruistic and selfish behaviour in Neolithic Households under varying degrees of environmental stress.
+NeoCOOP is an agent-based model (ABM) designed to simulate the emergence and evolution of altruistic and selfish 
+behaviour in Neolithic Households under varying degrees of environmental stress.
+
+An ODD+D [[Müller et al., 2013]](https://www.sciencedirect.com/science/article/pii/S1364815213001394) description plus additional model details have been included in [Supplementary Materials.pdf](./Supplementary%20Materials.pdf)
 
 ![Visualization of NeoCOOP. Black pixels are settlements and gray pixels are farmland](./resources/land_ownership.jpeg)
 
