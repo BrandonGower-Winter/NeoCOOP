@@ -425,7 +425,8 @@ class SettlementRelationshipComponent(Component):
         """ Returns a list of grid positions that neighbour the settlement and are unoccupied. """
         emptyCells = []
         count = start_count
-        while len(emptyCells) < target_count and count <= AgentResourceAcquisitionSystem.max_acquisition_distance:
+
+        while len(emptyCells) < target_count and count <= self.model.systemManager.systems['RAS'].max_acquisition_distance:
             coords = self.model.environment.cells['pos'][self.settlements[settlementID].pos[0]]
 
             candidate_cells = CAgentResourceAcquisitionFunctions.generateBorderCells(coords[0], coords[1],

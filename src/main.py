@@ -4,6 +4,7 @@ import multiprocessing
 import NeoCOOP
 import numpy as np
 import os
+import SimpleVegetationModel
 import time
 
 from Agents import *
@@ -36,7 +37,7 @@ def parseArgs():
                         action='store_true')
     parser.add_argument('-b', '--base', help='Base name of all the generated files.', default=store_path)
     parser.add_argument('--frequency', help='Frequency at which to capture snapshots.', default=1, type=int)
-    parser.add_argument('--thread', help='Tell the application to multi-thread your application.',
+    parser.add_argument('--thread', help='Tell the application to multi-thread your application. Still WIP.',
                         action='store_true')
     parser.add_argument('--seed', help="Specify the seed for the Model's pseudorandom number generator", default=None,
                         type=int)

@@ -1,5 +1,6 @@
 import ECAgent.Environments as env
 import logging
+import numpy
 
 from Agents import HouseholdRelationshipComponent, SettlementRelationshipComponent
 from ECAgent.Core import Model
@@ -8,6 +9,9 @@ from ECAgent.Environments import PositionComponent
 from Logging import ILoggable
 
 class NeoCOOP(Model, IDecodable, ILoggable):
+
+    ENV_SIMPLE = 0
+    ENV_VEGETATION_MODEL = 1
 
     parser = None
     pool_count = 0
@@ -18,7 +22,7 @@ class NeoCOOP(Model, IDecodable, ILoggable):
     seed = None
 
     def __init__(self, width: int, height: int, iterations: int, start_x: int, start_y: int, min_height: int,
-                 max_height: int, cellSize: int, debug: bool = True):
+                 max_height: int, cellSize: int, env_type:int = ENV_SIMPLE, debug: bool = True):
 
         Model.__init__(self, seed=NeoCOOP.seed, logger=None)
         IDecodable.__init__(self)
@@ -35,6 +39,8 @@ class NeoCOOP(Model, IDecodable, ILoggable):
         self.min_height = min_height
         self.max_height = max_height
 
+        self.env_type = env_type
+
         self.load_environment_layers(NeoCOOP.parser.file)  # Assumes a parser.file exists
 
     def load_environment_layers(self, path_to_decoder_file: str):
@@ -44,50 +50,32 @@ class NeoCOOP(Model, IDecodable, ILoggable):
         # Get heightmap
         from PIL import Image
 
-        im = Image.open(path_to_decoder_file + 'heightmap.png').convert('L')
-        soil_mask = Image.open(path_to_decoder_file + 'soilmask.png').convert('L')
-        slope_img = Image.open(path_to_decoder_file + 'slope_map.png').convert('L')
-
         height_diff = self.max_height - self.min_height
 
-        heightmap = []
-        soil_map = []
-        slope_map = []
-
-        for x in range(self.start_x, self.start_x + self.environment.width):
-            row = []
-            soil_row = []
-            slope_row = []
-
-            for y in range(self.start_y, self.start_y + self.environment.height):
-                row.append(self.min_height + (im.getpixel((x, y)) / 255.0 * height_diff))
-                soil_row.append((soil_mask.getpixel((x, y)) / 255.0 * 100))
-                slope_row.append(slope_img.getpixel((x, y)) / 255.0)
-
-            heightmap.append(row)
-            soil_map.append(soil_row)
-            slope_map.append(slope_row)
+        heightmap = self.min_height + (
+                numpy.asarray(Image.open(path_to_decoder_file + 'heightmap.png').convert('L')) / 255.0 * height_diff)
 
         def elevation_generator_functor(pos, cells):
             return heightmap[pos[0]][pos[1]]
 
-        def soil_generator(pos, cells):
-            return soil_map[pos[0]][pos[1]]
-
-        def slope_generator(pos, cells):
-            return 1.0 - slope_map[pos[0]][pos[1]]
-
         self.environment.addCellComponent('height', elevation_generator_functor)
 
-        # Generate slope data
+        if self.env_type == NeoCOOP.ENV_VEGETATION_MODEL:
+            soil_map = numpy.asarray(Image.open(path_to_decoder_file + 'soilmask.png').convert('L')) / 255.0 * 100
+            slope_map = numpy.asarray(Image.open(path_to_decoder_file + 'slope_map.png').convert('L')) / 255.0
 
-        logging.info('\t-Generating Slopemap')
+            def soil_generator(pos, cells):
+                return soil_map[pos[0]][pos[1]]
 
-        self.environment.addCellComponent('slope', slope_generator)
+            def slope_generator(pos, cells):
+                return 1.0 - slope_map[pos[0]][pos[1]]
 
-        logging.info('\t-Generating Soil Data')
+            # Generate slope data
+            logging.info('\t-Generating Slopemap')
+            self.environment.addCellComponent('slope', slope_generator)
 
-        self.environment.addCellComponent('sand_content', soil_generator)
+            logging.info('\t-Generating Soil Data')
+            self.environment.addCellComponent('sand_content', soil_generator)
 
     @staticmethod
     def decode(params: dict):
@@ -103,8 +91,12 @@ class NeoCOOP(Model, IDecodable, ILoggable):
         if 'start_y' in params:
             start_y = params['start_y']
 
-        return NeoCOOP(width, height, params['iterations'],
-                          start_x, start_y, min_height, max_height, params['cell_dim'])
+        env_type = NeoCOOP.ENV_SIMPLE
+        if 'env_type' in params:
+            env_type = params['env_type']
+
+        return NeoCOOP(width, height, params['iterations'], start_x, start_y, min_height,
+                       max_height, params['cell_dim'],env_type=env_type)
 
 def init_settlements(params : dict):
     model = params['model']

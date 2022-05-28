@@ -94,13 +94,13 @@ class GlobalEnvironmentSystem(System, IDecodable, ILoggable):
         self.interpolator_range = interpolater_range
 
         if 'frequency' in self.temperature_dict:
-            temperature_dict['frequency'] = GlobalEnvironmentSystem.convert_to_freq(temperature_dict['frequency'], self.interpolator_range)
+            self.temperature_dict['frequency'] = GlobalEnvironmentSystem.convert_to_freq(temperature_dict['frequency'], self.interpolator_range)
 
         if 'frequency' in self.rainfall_dict:
-            rainfall_dict['frequency'] = GlobalEnvironmentSystem.convert_to_freq(rainfall_dict['frequency'], self.interpolator_range)
+            self.rainfall_dict['frequency'] = GlobalEnvironmentSystem.convert_to_freq(rainfall_dict['frequency'], self.interpolator_range)
 
         if 'frequency' in self.solar_dict:
-            solar_dict['frequency'] = GlobalEnvironmentSystem.convert_to_freq(solar_dict['frequency'], self.interpolator_range)
+            self.solar_dict['frequency'] = GlobalEnvironmentSystem.convert_to_freq(solar_dict['frequency'], self.interpolator_range)
 
         model.environment.addComponent(GlobalEnvironmentComponent(model.environment, model, start_temp, end_temp,
                                                                   start_rainfall, end_rainfall, start_solar,
@@ -322,7 +322,8 @@ class VegetationSnapshotCollector(Collector):
         super().__init__(id, model, frequency=frequency)
 
         self.file_name = file_name
-        self.headers = ['moisture', 'vegetation', 'isOwned', 'isSettlement']
+        self.headers = [x for x in ['moisture', 'vegetation', 'isOwned', 'isSettlement', 'resources']
+                        if x in self.model.environment.cells]
 
     def collect(self):
         self.model.environment.cells.to_csv(self.file_name + '/iteration_{}.csv'.format(self.model.systemManager.timestep),
