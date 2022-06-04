@@ -33,7 +33,6 @@ class SimpleGlobalEnvironmentSystem(System, IDecodable, ILoggable):
 
         self.stress_dict = stress_dict
         self.interpolator_range = interpolater_range
-        self.env_stress = 0.0
 
         if 'frequency' in self.stress_dict:
             self.stress_dict['frequency'] = SimpleGlobalEnvironmentSystem.convert_to_freq(stress_dict['frequency'],
@@ -103,14 +102,16 @@ class SimpleGlobalEnvironmentSystem(System, IDecodable, ILoggable):
         vmin, vmax = SimpleGlobalEnvironmentSystem.calcStressVal(env_comp.start_stress_range, env_comp.end_stress_range,
                                                                percentage, self.stress_dict)
 
-        self.env_stress = self.model.random.uniform(vmin, vmax)
-
         # Update resource cells
-        cells = numpy.ones(self.model.environment.width * self.model.environment.height) * self.env_stress
+        cells = numpy.ones(self.model.environment.width * self.model.environment.height)
+
+        for i in range(len(cells)):
+            cells[i] *= self.model.random.uniform(vmin, vmax)
+
         self.model.environment.cells.update({'resources': cells})
 
         # Set Stress
-        self.logger.info('GES:  {}'.format(self.env_stress))
+        self.logger.info('GES:  {}'.format((vmin, vmax)))
 
 class SimpleAgentResourceAcquisitionSystem(System, IDecodable, ILoggable):
     """ This system is responsible for executing the Agent Resource Acquisition process. """

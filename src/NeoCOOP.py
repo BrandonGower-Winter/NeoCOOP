@@ -124,15 +124,17 @@ def init_settlements(params : dict):
     # Update num_households to APS
     model.systemManager.systems['APS'].num_households = len(model.environment.agents)
 
+    div_length = len(params['adjust_ranges']) if 'adjust_ranges' in params else 0
+    settlement_length = len(model.environment[SettlementRelationshipComponent].settlements)
     # Assign Households to Settlements
     for agent in model.environment.getAgents():
 
         if params['strategy'] == 'grouped':
-            s = model.environment[SettlementRelationshipComponent].settlements[agent.id % 20]
+            s = model.environment[SettlementRelationshipComponent].settlements[agent.id % settlement_length]
             agent[HouseholdRelationshipComponent].peer_resource_transfer_chance = model.random.uniform(
-                params['adjust_ranges'][s.id % 4][0], params['adjust_ranges'][s.id % 4][1])
+                params['adjust_ranges'][s.id % div_length][0], params['adjust_ranges'][s.id % div_length][1])
             agent[HouseholdRelationshipComponent].sub_resource_transfer_chance = model.random.uniform(
-                params['adjust_ranges'][s.id % 4][2], params['adjust_ranges'][s.id % 4][3])
+                params['adjust_ranges'][s.id % div_length][2], params['adjust_ranges'][s.id % div_length][3])
 
         else:
             s = model.random.choice(model.environment[SettlementRelationshipComponent].settlements)  # Get ID

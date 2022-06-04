@@ -186,6 +186,9 @@ def main():
                 to_write[runs[i]]['settlements'] = get_composite_property_as_dict(agent_snapshots, ['settlement_id'],
                                                                                   [('count', unq)])
 
+                to_write[runs[i]]['attachment'] = get_composite_property_as_dict(agent_snapshots, ['attachment'],
+                                                                                [('mean', statistics.mean)])
+
                 gc.collect()
             print()
             print('Writing data to output file:' + parser.output + '/processed_agents_' + scenario + '.json:')

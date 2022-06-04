@@ -436,6 +436,12 @@ def generate_household_plots(parser):
                             parser.path + '/agent_plots/transfer_chance.png',
                             y_label='Probability', legend='center left')
 
+    attach_dict = get_composite_property_as_dict(agent_snapshots, ['attachment'],[('mean', statistics.mean)], sort=True)
+
+    generate_plot_from_dict('Average Attachment of Agents over 2000 iterations', attach_dict,
+                            parser.path + '/agent_plots/attachment.png',
+                            y_label='Attachment', legend='center left')
+
     bins = ['0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9', '1.0']
 
     precords = get_composite_property_as_dict(agent_snapshots, ['peer_chance'],
@@ -633,7 +639,7 @@ if __name__ == '__main__':
             pixels.append(0)
 
     #generate_settlement_plots(parser, pixels)
-    generate_log_plots(parser)
+    #generate_log_plots(parser)
     #generate_environment_plots(parser, pixels)
     generate_household_plots(parser)
 

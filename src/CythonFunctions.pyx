@@ -166,7 +166,7 @@ cdef class CAgentResourceConsumptionSystemFunctions:
         return remaining_resources, hunger
 
     @staticmethod
-    def ARCProcess(object resComp) -> float:
+    def ARCProcess(object resComp, float storageEfficiency) -> float:
         cdef float curr_res, req_res, rem_res, hunger, consumed, i_left
         cdef int i
 
@@ -174,8 +174,9 @@ cdef class CAgentResourceConsumptionSystemFunctions:
         req_res = resComp.required_resources()
         rem_res, hunger = CAgentResourceConsumptionSystemFunctions.consume(curr_res, req_res)
         resComp.hunger = hunger
+        resComp.iter_since_last_move += 1
         resComp.satisfaction += hunger
-        resComp.resources = rem_res
+        resComp.resources = rem_res * storageEfficiency
 
         if rem_res == 0.0:
             for i in range(len(resComp.storage_decay)):

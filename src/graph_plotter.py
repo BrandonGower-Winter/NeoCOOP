@@ -19,7 +19,7 @@ array_size = 2000
 iteration_multiplier = 5
 runs_count = 50
 
-plots_ids = ['N', '1', '2', '4', '8', '16', '32', 'P']
+plots_ids = ['N', '1', '2', '4', '8', '16', '32', 'P','16F']
 
 def get_scenario_data(runs: {}):
 

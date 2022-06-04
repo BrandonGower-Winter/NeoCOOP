@@ -42,6 +42,8 @@ class ResourceComponent(Component):
         # Not really a measure of hunger but a measure of how much of the total a family resources requirement was met
         self.hunger = 0
         self.satisfaction = 0.0
+        self.iter_since_last_move = 0
+        self.attachment = self.model.random.random()
         self.ownedLand = []
         self.storage_decay = []
         self.a_workers = 0
@@ -212,6 +214,7 @@ class Household(Agent, IDecodable):
         created_dict['resources'] = self[ResourceComponent].resources
         created_dict['hunger'] = self[ResourceComponent].hunger
         created_dict['satisfaction'] = self[ResourceComponent].satisfaction
+        created_dict['attachment'] = self[ResourceComponent].attachment
         created_dict['owned_land'] = self[ResourceComponent].ownedLand
 
         created_dict['settlement_id'] = self[HouseholdRelationshipComponent].settlementID
@@ -475,7 +478,7 @@ class SettlementRelationshipComponent(Component):
                       if self.model.environment.getAgent(h).hasComponent(HouseholdPreferenceComponent)]
         ws = np.array([h.social_status() for h in households])
 
-        forage, farm, learning_rate, conformity, peer, sub = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+        forage, farm, learning_rate, conformity, peer, sub, attach = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
 
         if AgentIEAdaptationSystem.influence_type == 'BST':
             i = np.argmax(ws)
@@ -485,6 +488,7 @@ class SettlementRelationshipComponent(Component):
             conformity = households[i][IEComponent].conformity
             peer = households[i][HouseholdRelationshipComponent].peer_resource_transfer_chance
             sub = households[i][HouseholdRelationshipComponent].sub_resource_transfer_chance
+            attach = households[i][ResourceComponent].attachment
         else:
             if ws.sum() == 0.0:
                 ws = np.ones((len(households)))  # If the village has no one with any social status, they are all equal
@@ -499,8 +503,9 @@ class SettlementRelationshipComponent(Component):
                 conformity += households[i][IEComponent].conformity * ws[i]
                 peer += households[i][HouseholdRelationshipComponent].peer_resource_transfer_chance * ws[i]
                 sub += households[i][HouseholdRelationshipComponent].sub_resource_transfer_chance * ws[i]
+                attach += households[i][ResourceComponent].attachment * ws[i]
 
-        return BeliefSpace(forage, farm, learning_rate, conformity, peer, sub)
+        return BeliefSpace(forage, farm, learning_rate, conformity, peer, sub, attach)
 
     def get_learning_rate_std(self, sID):
         """Returns the Standard Deviation of the House Learning Rate for all Households that are in settlement sID """
@@ -949,6 +954,8 @@ class AgentResourceTransferSystem(System, IDecodable, ILoggable):
 class AgentResourceConsumptionSystem(System, IDecodable, ILoggable):
     """ This System is Responsible for a Household's Consumption of Resources """
 
+    storage_efficiency = 1.0
+
     def __init__(self, id: str, model: Model,priority):
         System.__init__(self, id, model, priority=priority)
         IDecodable.__init__(self)
@@ -956,6 +963,7 @@ class AgentResourceConsumptionSystem(System, IDecodable, ILoggable):
 
     @staticmethod
     def decode(params: dict):
+        AgentResourceConsumptionSystem.storage_efficiency = params['storage_efficiency'] if 'storage_efficiency' in params else 1.0
         return AgentResourceConsumptionSystem(params['id'], params['model'], params['priority'])
 
     @staticmethod
@@ -966,21 +974,11 @@ class AgentResourceConsumptionSystem(System, IDecodable, ILoggable):
 
         return remaining_resources, hunger
 
-    @staticmethod
-    def ARCProcess(resComp: ResourceComponent) -> float:
-
-        req_res = resComp.required_resources()
-        rem_res, hunger = AgentResourceConsumptionSystem.consume(resComp.resources, req_res)
-        resComp.hunger = hunger
-        resComp.satisfaction += hunger
-        resComp.resources = rem_res
-
-        return req_res * hunger
-
     def execute(self):
         start_time = time.time()
         to_log = ''
-        for stats in [(a.id, CAgentResourceConsumptionSystemFunctions.ARCProcess(a[ResourceComponent]))
+        for stats in [(a.id, CAgentResourceConsumptionSystemFunctions.ARCProcess(a[ResourceComponent],
+                                                            AgentResourceConsumptionSystem.storage_efficiency))
                       for a in self.model.environment.getAgents()]:
             to_log += 'HOUSEHOLD.CONSUME: {} {}\n'.format(stats[0], stats[1])
 
@@ -1102,9 +1100,9 @@ class AgentPopulationSystem(System, IDecodable, ILoggable):
         parents = [household, self.determine_parent(sID, new_household)]
 
         # Determine Gene Array
-        parent_indices = [self.model.random.randint(0, 1) for _ in range(6)]
+        parent_indices = [self.model.random.randint(0, 1) for _ in range(7)]
         # And if mutation should occur
-        mutate_arr = [self.model.random.random() for _ in range(6)]
+        mutate_arr = [self.model.random.random() for _ in range(7)]
 
         # Set Household Resource Trading Personality Types with mutation
         # Peer Resource Transfer
@@ -1176,6 +1174,14 @@ class AgentPopulationSystem(System, IDecodable, ILoggable):
 
             self.logger.info('MUTATE.HOUSEHOLD.CONFORMITY: {}'.format(new_household.id))
 
+        # Attachment
+        if mutate_arr[6] > IEComponent.mutation_rate:
+            new_household[ResourceComponent].attachment = parents[parent_indices[6]][ResourceComponent].attachment
+        else:
+            new_household[ResourceComponent].attachment = self.model.random.random()
+            self.logger.info('MUTATE.HOUSEHOLD.ATTACHMENT: {}'.format(new_household.id))
+
+
         self.num_households += 1
 
         household[ResourceComponent].update_able_workers()
@@ -1196,13 +1202,17 @@ class AgentPopulationSystem(System, IDecodable, ILoggable):
         for household in self.model.environment.getAgents():
 
             # Reallocation check
-            if self.model.systemManager.timestep != 0 and self.model.systemManager.timestep % self.model.environment[SettlementRelationshipComponent].yrs_per_move == 0:
-                if self.model.random.random() > (household[ResourceComponent].satisfaction / (self.model.environment[SettlementRelationshipComponent].yrs_per_move-1)):
-
+            if self.model.systemManager.timestep != 0 and (self.model.systemManager.timestep + 1) % self.model.environment[SettlementRelationshipComponent].yrs_per_move == 0:
+                # Probability of moving is the satisfaction of the agent * the attachment of the agent.
+                # The * 2 is to denormalize the value to the range [0, 2]
+                moveProb = household[ResourceComponent].satisfaction / household[ResourceComponent].iter_since_last_move
+                moveProb *= 2 * household[ResourceComponent].attachment
+                if self.model.random.random() > moveProb:
                     logging.debug('Moving Household: ' + str(household.id))
                     self.reallocate_agent(household)
 
-                household[ResourceComponent].satisfaction = 0.0  # Reset hunger decision every 'yrs_per_move' steps
+                household[ResourceComponent].satisfaction = 0.0  # Reset satisfaction
+                household[ResourceComponent].iter_since_last_move = 0 # Reset iterations since last move
 
             # Birth Chance
             for i in range(household[ResourceComponent].able_workers()):
@@ -1427,13 +1437,14 @@ class AgentPopulationSystem(System, IDecodable, ILoggable):
 
 class BeliefSpace:
     """ This is a container class for belief space construction and influence """
-    def __init__(self, forage_utility, farm_utility, learning_rate, conformity, peer_transfer, sub_transfer):
+    def __init__(self, forage_utility, farm_utility, learning_rate, conformity, peer_transfer, sub_transfer, attachment):
         self.forage_utility = forage_utility
         self.farm_utility = farm_utility
         self.learning_rate = learning_rate
         self.conformity = conformity
         self.peer_transfer = peer_transfer
         self.sub_transfer = sub_transfer
+        self.attachment = attachment
 
     def influence(self, bs, dst_penalty: float):
         self.forage_utility += (bs.forage_utility - self.forage_utility) * self.conformity * dst_penalty
@@ -1441,7 +1452,7 @@ class BeliefSpace:
         self.learning_rate += (bs.learning_rate - self.learning_rate) * self.conformity * dst_penalty
         self.peer_transfer += (bs.peer_transfer - self.peer_transfer) * self.conformity * dst_penalty
         self.sub_transfer += (bs.sub_transfer - self.sub_transfer) * self.conformity * dst_penalty
-
+        self.attachment += (bs.attachment - self.attachment) * self.conformity * dst_penalty
         # Do Conformity Last so it doesn't affect the other results.
         self.conformity += (bs.conformity - self.conformity) * self.conformity * dst_penalty
 
@@ -1452,12 +1463,13 @@ class BeliefSpace:
             'learning_rate': self.learning_rate,
             'conformity': self.conformity,
             'peer_transfer': self.peer_transfer,
-            'sub_transfer': self.sub_transfer
+            'sub_transfer': self.sub_transfer,
+            'attachment': self.attachment
         }
 
     def duplicate(self):
         return BeliefSpace(self.forage_utility, self.farm_utility, self.learning_rate, self.conformity,
-                           self.peer_transfer, self.sub_transfer)
+                           self.peer_transfer, self.sub_transfer, self.attachment)
 
 
 class AgentIEAdaptationSystem(System, IDecodable, ILoggable):
@@ -1550,6 +1562,8 @@ class AgentIEAdaptationSystem(System, IDecodable, ILoggable):
                     elif index == 4:  # Learning Rate
                         agent[HouseholdPreferenceComponent].learning_rate = self.model.random.gauss(
                             agent[HouseholdPreferenceComponent].learning_rate, sr_comp.get_learning_rate_std(sID))
+                    elif index == 5:
+                        agent[ResourceComponent].attachment = self.model.random.random()
                     else:  # Conformity
                         agent[IEComponent].conformity = max(0.01, self.model.random.gauss(
                             agent[IEComponent].conformity, sr_comp.get_conformity_std(sID)))
@@ -1571,9 +1585,20 @@ class AgentIEAdaptationSystem(System, IDecodable, ILoggable):
     @staticmethod
     def influence_agent(agent: IEHousehold, bs: BeliefSpace):
 
-        conformity = agent[IEComponent].conformity
+        # Apply principles of Homophily (like attracts like)
+        # Current assumes the values are normalized [0,1]
+        similarity  = 1.0 - np.mean([
+            #abs(bs.forage_utility - agent[HouseholdPreferenceComponent].forage_utility),
+            #abs(bs.farm_utility - agent[HouseholdPreferenceComponent].farm_utility),
+            #abs(bs.learning_rate - agent[HouseholdPreferenceComponent].learning_rate),
+            abs(bs.conformity - agent[IEComponent].conformity),
+            abs(bs.peer_transfer - agent[HouseholdRelationshipComponent].peer_resource_transfer_chance),
+            abs(bs.sub_transfer - agent[HouseholdRelationshipComponent].sub_resource_transfer_chance),
+            abs(bs.attachment - agent[ResourceComponent].attachment)
+        ])
 
-        agent[HouseholdPreferenceComponent].forage_utility += ( bs.forage_utility - agent[HouseholdPreferenceComponent
+        conformity = agent[IEComponent].conformity * similarity
+        agent[HouseholdPreferenceComponent].forage_utility += (bs.forage_utility - agent[HouseholdPreferenceComponent
         ].forage_utility) * conformity
 
         agent[HouseholdPreferenceComponent].farm_utility += (bs.farm_utility - agent[HouseholdPreferenceComponent
@@ -1588,6 +1613,7 @@ class AgentIEAdaptationSystem(System, IDecodable, ILoggable):
             HouseholdRelationshipComponent].peer_resource_transfer_chance) * conformity
         agent[HouseholdRelationshipComponent].sub_resource_transfer_chance += (bs.sub_transfer - agent[
             HouseholdRelationshipComponent].sub_resource_transfer_chance) * conformity
+        agent[ResourceComponent].attachment += (bs.attachment - agent[ResourceComponent].attachment) * conformity
 
 
     @staticmethod
