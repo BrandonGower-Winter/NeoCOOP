@@ -24,7 +24,7 @@ def get_json_iteration(filename: str) -> int:
     return int(filename[filename.index('_')+1:-5])
 
 
-def load_json_files(folder_path: str, sort: bool = True, key=get_json_iteration) -> []:
+def load_json_files(folder_path: str, sort: bool = True, key=get_json_iteration, filters = None) -> []:
 
     json_snapshots = []
 
@@ -36,7 +36,21 @@ def load_json_files(folder_path: str, sort: bool = True, key=get_json_iteration)
 
         for file in json_files:
             with open(os.path.join(root, file)) as json_file:
-                json_snapshots.append(json.load(json_file))
+                to_append = []
+                read_dict = json.load(json_file)
+
+                if filters is not None:
+                    for entity in read_dict:
+                        temp_dict = {}
+                        for f in filters:
+                            temp_dict[f] = read_dict[f]
+                        to_append.append(entity)
+                else:
+                    to_append = read_dict
+
+                json_snapshots.append(to_append)
+
+            gc.collect()
 
     return json_snapshots
 
@@ -158,7 +172,9 @@ def main():
                 progress(i, run_len)
                 to_write[runs[i]] = {}
                 # Get all agent json files in this simulation run
-                agent_snapshots = load_json_files(str(scenario_path) + '/' + runs[i] + '/agents')
+                agent_snapshots = load_json_files(str(scenario_path) + '/' + runs[i] + '/agents',
+                                                  filters=['resources', 'load', 'occupants', 'peer_chance', 'sub_chance',
+                                                           'settlement_id', 'attachment'])
 
                 to_write[runs[i]]['resources'] = get_composite_property_as_dict(agent_snapshots, ['resources'],
                                                                                 [('mean', statistics.mean),
