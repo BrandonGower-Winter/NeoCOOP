@@ -43,14 +43,12 @@ def load_json_files(folder_path: str, sort: bool = True, key=get_json_iteration,
                     for entity in read_dict:
                         temp_dict = {}
                         for f in filters:
-                            temp_dict[f] = read_dict[f]
+                            temp_dict[f] = entity[f]
                         to_append.append(entity)
                 else:
                     to_append = read_dict
 
                 json_snapshots.append(to_append)
-
-            gc.collect()
 
     return json_snapshots
 
