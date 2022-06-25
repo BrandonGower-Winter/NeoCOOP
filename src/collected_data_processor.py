@@ -142,6 +142,8 @@ def main():
                         required=True)
     parser.add_argument('-v', '--verbose', help='Will print out informative information to the terminal.',
                         action='store_true')
+    parser.add_argument('-m', '--mode', help='The mode it the collected data processor will run on.', default='v',
+                        type=str)
 
     parser = parser.parse_args()
 
@@ -203,11 +205,20 @@ def main():
                 to_write[runs[i]]['attachment'] = get_composite_property_as_dict(agent_snapshots, ['attachment'],
                                                                                 [('mean', statistics.mean)])
 
+                if parser.mode == 'c':
+                    print('Writing data to output file:' + parser.output + '/processed_agents_' + scenario +
+                          '_' + runs[i] + '.json:')
+                    with open(parser.output + '/processed_agents_' + scenario +
+                              '_' + runs[i] + '.json', 'w') as outfile:
+                        json.dump(to_write[runs[i]], outfile, indent=4)
+                    del to_write[runs[i]]
+
                 gc.collect()
             print()
-            print('Writing data to output file:' + parser.output + '/processed_agents_' + scenario + '.json:')
-            with open(parser.output + '/processed_agents_' + scenario + '.json', 'w') as outfile:
-                json.dump(to_write, outfile, indent=4)
+            if parser.mode == 'v':
+                print('Writing data to output file:' + parser.output + '/processed_agents_' + scenario + '.json:')
+                with open(parser.output + '/processed_agents_' + scenario + '.json', 'w') as outfile:
+                    json.dump(to_write, outfile, indent=4)
 
 
 if __name__ == '__main__':
