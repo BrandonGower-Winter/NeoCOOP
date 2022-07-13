@@ -10,7 +10,7 @@ An ODD+D [[Müller et al., 2013]](https://www.sciencedirect.com/science/article/
 
 **Note:** This document assumes you are using a UNIX-based OS.
 
-To use NeoCOOP, first clone the repo and navigate to the *ABM-gecco2022* directory using your favourite terminal application.
+To use NeoCOOP, first clone the repo and navigate to the *NeoCOOP/* directory using your favourite terminal application.
 We first need to create a virtual environment for NeoCOOP and we do so by typing:
 
 `> make`
@@ -30,7 +30,7 @@ This will create several *.so* files that NeoCOOP will make use of.
 
 To run an instance of NeoCOOP, first make sure you have installed all of the neccessary modules and have the virtual environment activated.
 
-We run a single instance of NeoCOOP by typing the following into your terminal:
+Run a single instance of NeoCOOP by typing the following into your terminal:
 
 `> python3 src/main.py -f path/to/decoder [-lrb basename] [--frequency n]`
 
@@ -70,6 +70,23 @@ To process batch simulations, run the following:
 
 This will create a series of JSON files will all of a batch simulations useful information.
 
+If the size of the generated simulation data cannot be processed by your machine, you can process and stitch the data
+using:
+
+```python
+> python3 src/scenario_data_processor.py -p path -o output_folder
+```
+
+and
+
+```python
+> python3 src/scenario_stitcher.py -p path -o output_file -s file_suffix
+```
+
+**Note:** The output folder `-o` of `scenario_data_processor.py` and the input path `-p` of `scenario_stitcher.py` should
+be the same value. `scenario_data_processor.py` processed the data produced by a scenario and `scenario_stitcher.py` 
+combines it together to get to match the output produced by `collected_data_processor.py`.
+
 ## Plotting Graphs:
 
 While the data processed by `collected_data_processor.py` can be used to create plots of your liking,
@@ -80,13 +97,37 @@ we do include a script `graph_plotter.py` that will produce a wide variety of gr
 This will produce graphs of agent resource trading beliefs, population levels, inequality, and settlement density:
 
 Agent Populations:
+
 ![Example of Agent Populations across various scenarios](./resources/population.png)
+
 Resource Trading Beliefs:
+
 ![Example of Agent Peer Transfer Beliefs across various scenarios](./resources/peer_heatmap.png)
 ![Example of Agent Subordinate Transfer Beliefs across various scenarios](./resources/sub_heatmap.png)
+
 Gini Heatmap:
+
 ![Example of Agent Social inequality across various scenarios](./resources/gini_heatmap.png)
+
 Settlement Density:
+
 ![Example of Settlement Density across various scenarios](./resources/settlement_density.png)
+
 Another look at the final Resource Trading Beliefs for one scenario:
+
 ![Example of Agent Resource Transfer Beliefs across various scenarios](./resources/P_distribution.png)
+
+## Work Published using NeoCOOP
+
+```
+Brandon Gower-Winter and Geoff Nitschke. Do harsher environments cause selfish or altruistic behavior? 
+In Genetic and Evolutionary Computation Conference Companion (GECCO ’22 Companion)), July 2022.
+Available here: http://www.nitschke-lab.uct.ac.za/sites/default/files/image_tool/images/540/Papers/
+2022-Do%20Harsher%20Environments%20cause%20Selfish%20or%20Altruistic%20Behavior.pdf
+```
+
+```
+Brandon Gower-Winter and Geoff Nitschke. Societies prefer the middle-ground between selfishness and 
+cooperation. In 4th International Workshop on Agent-Based Modelling of Human Behaviour (ABMHuB’22), 
+2022.  Available here: http://abmhub.cs.ucl.ac.uk/2022/camera_ready/Gower-Winter_Nitschke.pdf
+```
