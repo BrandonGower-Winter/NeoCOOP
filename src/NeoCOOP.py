@@ -10,8 +10,25 @@ from Logging import ILoggable
 
 class NeoCOOP(Model, IDecodable, ILoggable):
 
+    # Environment Settings
     ENV_SIMPLE = 0
     ENV_VEGETATION_MODEL = 1
+
+    # Env Layer Keys
+    HEIGHT_KEY = 'height'
+    SLOPE_KEY = 'slope'
+    IS_WATER_KEY = 'iswater'
+    FLOOD_KEY = 'flood'
+    SAND_KEY = 'sand'
+    CLAY_KEY = 'clay'
+
+    # Img Aliases
+    HEIGHTMAP_ALIAS = 'height'
+    SLOPEMAP_ALIAS = 'slope'
+    IS_WATER_ALIAS = 'iswater'
+    FLOOD_ALIAS = 'flood'
+    SAND_ALIAS = 'sand'
+    CLAY_ALIAS = 'clay'
 
     parser = None
     pool_count = 0
@@ -22,7 +39,7 @@ class NeoCOOP(Model, IDecodable, ILoggable):
     seed = None
 
     def __init__(self, width: int, height: int, iterations: int, start_x: int, start_y: int, min_height: int,
-                 max_height: int, cellSize: int, env_type:int = ENV_SIMPLE, debug: bool = True):
+                 max_height: int, cell_size: int, env_type:int = ENV_SIMPLE, env_flood = False, debug: bool = True):
 
         Model.__init__(self, seed=NeoCOOP.seed, logger=None)
         IDecodable.__init__(self)
@@ -31,7 +48,7 @@ class NeoCOOP(Model, IDecodable, ILoggable):
         logging.info('\t-Creating Gridworld')
         self.debug = debug
         self.environment = env.GridWorld(width, height, self)
-        self.cellSize = cellSize
+        self.cell_size = cell_size
         self.iterations = iterations
 
         self.start_x = start_x
@@ -40,68 +57,121 @@ class NeoCOOP(Model, IDecodable, ILoggable):
         self.max_height = max_height
 
         self.env_type = env_type
+        self.enable_flood = env_flood
 
         self.load_environment_layers(NeoCOOP.parser.file)  # Assumes a parser.file exists
 
     def load_environment_layers(self, path_to_decoder_file: str):
 
-        logging.info('\t-Loading Heightmap')
+        if self.env_type == NeoCOOP.ENV_SIMPLE:
+            logging.info('\t-Creating Simple Gridworld of Size %s x %s' % (self.environment.width, self.environment.height))
+        else:
+            logging.info('\t-Creating Gridworld with Vegetation Model of Size %s x %s' % (self.environment.width, self.environment.height))
+            # Get heightmap
+            from PIL import Image
 
-        # Get heightmap
-        from PIL import Image
+            logging.info('\t-Loading Heightmap')
+            height_diff = self.max_height - self.min_height
+            heightmap = self.min_height + (
+                numpy.asarray(Image.open(path_to_decoder_file + NeoCOOP.HEIGHTMAP_ALIAS).convert('L')) / 255.0 * height_diff)
 
-        height_diff = self.max_height - self.min_height
+            def elevation_generator_functor(pos, cells):
+                return heightmap[pos[1]][pos[0]]
 
-        heightmap = self.min_height + (
-                numpy.asarray(Image.open(path_to_decoder_file + 'heightmap.png').convert('L')) / 255.0 * height_diff)
+            self.environment.addCellComponent(NeoCOOP.HEIGHT_KEY, elevation_generator_functor)
 
-        def elevation_generator_functor(pos, cells):
-            return heightmap[pos[0]][pos[1]]
-
-        self.environment.addCellComponent('height', elevation_generator_functor)
-
-        if self.env_type == NeoCOOP.ENV_VEGETATION_MODEL:
-            soil_map = numpy.asarray(Image.open(path_to_decoder_file + 'soilmask.png').convert('L')) / 255.0 * 100
-            slope_map = numpy.asarray(Image.open(path_to_decoder_file + 'slope_map.png').convert('L')) / 255.0
-
-            def soil_generator(pos, cells):
-                return soil_map[pos[0]][pos[1]]
+            # Load slope data
+            logging.info('\t-Creating Slopemap')
+            slope_map = numpy.asarray(Image.open(path_to_decoder_file + NeoCOOP.SLOPEMAP_ALIAS).convert('L')) / 255.0
 
             def slope_generator(pos, cells):
                 return 1.0 - slope_map[pos[0]][pos[1]]
 
-            # Generate slope data
-            logging.info('\t-Generating Slopemap')
-            self.environment.addCellComponent('slope', slope_generator)
+            self.environment.addCellComponent(NeoCOOP.SLOPE_KEY, slope_generator)
 
-            logging.info('\t-Generating Soil Data')
-            self.environment.addCellComponent('sand_content', soil_generator)
+            # Load Soil Data
+            logging.info('\t-Loading Soil Data')
+
+            sand_map = numpy.asarray(Image.open(path_to_decoder_file + NeoCOOP.SAND_ALIAS).convert('L')) / 255.0 * 100
+            clay_map = numpy.asarray(Image.open(path_to_decoder_file + NeoCOOP.CLAY_ALIAS).convert('L')) / 255.0 * 100
+
+            def sand_generator(pos, cells):
+                return sand_map[pos[0]][pos[1]]
+
+            def clay_generator(pos, cells):
+                return clay_map[pos[0]][pos[1]]
+
+            self.environment.addCellComponent(NeoCOOP.SAND_KEY, sand_generator)
+            self.environment.addCellComponent(NeoCOOP.CLAY_KEY, clay_generator)
+
+            # Load Soil Data
+            logging.info('\t-Loading Water Cell Data')
+
+            water_map = numpy.asarray(Image.open(path_to_decoder_file + NeoCOOP.CLAY_ALIAS).convert('L')) > 0.005
+
+            def water_generator(pos, cells):
+                return water_map[pos[0]][pos[1]]
+
+            self.environment.addCellComponent(NeoCOOP.IS_WATER_KEY, water_generator)
+
+            # Load Flood Map
+            if self.enable_flood:
+                logging.info('\t-Loading Flood Map Data')
+                flood_map = self.min_height + (numpy.asarray(Image.open(path_to_decoder_file + NeoCOOP.FLOOD_ALIAS).convert('L')) / 255.0 * height_diff)
+
+                def flood_generator(pos, cells):
+                    return flood_map[pos[0]][pos[1]]
+
+                self.environment.addCellComponent(NeoCOOP.FLOOD_KEY, flood_generator)
 
     @staticmethod
     def decode(params: dict):
 
-        width, height = params['img_width'], params['img_height']
-        max_height, min_height = params['max_height'], params['min_height']
+        # Set environment size (defaults to 100x100)
+        width = params['img_width'] if 'img_width' in params else 100
+        height = params['img_height'] if 'img_height' in params else 100
 
-        start_x, start_y = 0, 0
+        # Defaults to 1ha
+        cell_dim = params['cell_dim'] if 'cell_dim' in params else 100
 
-        if 'start_x' in params:
-            start_x = params['start_x']
+        # Set max and min heightmap size
+        max_height = params['max_height'] if 'max_height' in params else 0.0
+        min_height = params['min_height'] if 'min_height' in params else 0.0
 
-        if 'start_y' in params:
-            start_y = params['start_y']
+        # Set map offsets
+        start_x = params['start_x'] if 'start_x' in params else 0
+        start_y = params['start_y'] if 'start_y' in params else 0
 
-        env_type = NeoCOOP.ENV_SIMPLE
-        if 'env_type' in params:
-            env_type = params['env_type']
+        # Set ENV Type (Defaults to SIMPLE)
+        env_type = params['env_type'] if 'env_type' in params else NeoCOOP.ENV_SIMPLE
 
-        return NeoCOOP(width, height, params['iterations'], start_x, start_y, min_height,
-                       max_height, params['cell_dim'],env_type=env_type)
+        # Grab desired simulation time (defaults to 1000)
+        iterations =  params['iterations'] if 'iterations' in params else 1000
 
+        # Get flood dynamics mode
+        env_flood = 'env_flood' in params
+
+        # Check if file aliases have been changed
+        if 'heightmap_alias' in params:
+            NeoCOOP.HEIGHTMAP_ALIAS = params['heightmap_alias']
+        if 'slopemap_alias' in params:
+            NeoCOOP.SLOPEMAP_ALIAS = params['slopemap_alias']
+        if 'iswater_alias' in params:
+            NeoCOOP.IS_WATER_ALIAS = params['iswater_alias']
+        if 'flood_alias' in params:
+            NeoCOOP.FLOOD_ALIAS = params['flood_alias']
+        if 'sand_alias' in params:
+            NeoCOOP.SAND_ALIAS = params['sand_alias']
+        if 'clay_alias' in params:
+            NeoCOOP.CLAY_ALIAS = params['clay_alias']
+
+        return NeoCOOP(width, height, iterations, start_x, start_y, min_height,
+                       max_height, cell_dim, env_type=env_type, env_flood=env_flood)
+
+# Function for initializing agent positions
 def init_settlements(params : dict):
     model = params['model']
     # Assign Settlement Positions based on selected strategy
-
     for sID in model.environment[SettlementRelationshipComponent].settlements:
         while True:
             if params['strategy'] == 'cluster':
