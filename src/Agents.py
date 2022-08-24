@@ -39,9 +39,10 @@ class ResourceComponent(Component):
         self.occupants = {}
         self.occupant_counter = 0
         self.resources = 0
-        # Not really a measure of hunger but a measure of how much of the total a family resources requirement was met
+        # Not really a measure of hunger but a measure of how much of the household's resources requirements were met
         self.hunger = 0
         self.satisfaction = 0.0
+        self.prev_satisfaction = 0.0
         self.iter_since_last_move = 0
         self.attachment = self.model.random.random()
         self.ownedLand = []
@@ -156,11 +157,51 @@ class HouseholdPreferenceComponent(Component):
         self.prev_hunger = 1.0
 
 
+class HouseholdRBAdaptiveComponent(Component):
+
+    yrs_to_look_back = 1
+    yr_look_back_weights = [1.0]
+
+    max_labour_adapt_size = 6.0
+
+    risk_elasticity = 1.0
+    cognitive_bias = 0.0
+
+    adaptation_intention_threshold = 0.5
+    learning_rate = 0.05
+
+    def __init__(self, agent: Agent, model: Model):
+        super().__init__(agent, model)
+
+        self.rainfall_memory = [0.0] * HouseholdRBAdaptiveComponent.yrs_to_look_back
+        self.flood_memory = [0.0] * HouseholdRBAdaptiveComponent.yrs_to_look_back
+
+        self.percentage_to_farm = 0.0  # Probability of Agent choosing to farm
+
+    def update_flood_memory(self, val: float):
+        self.flood_memory.append(val)
+
+        # Remove Oldest Memory
+        if len(self.flood_memory) > HouseholdRBAdaptiveComponent.yrs_to_look_back:
+            self.flood_memory.pop(0)
+
+    def update_rainfall_memory(self, val: float):
+        self.rainfall_memory.append(val)
+
+        # Remove Oldest Memory
+        if len(self.rainfall_memory) > HouseholdRBAdaptiveComponent.yrs_to_look_back:
+            self.rainfall_memory.pop(0)
+
+
 class IEComponent(Component):
     """ This component holds all of the necessary properties required for the Cultural Algorithm """
 
     mutation_rate = 0.05
     conformity_range = [0.0, 1.0]
+
+    gene_names = ['forage_utility', 'farm_utility', 'attachment', 'stubbornness', 'conformity', 'peer_transfer', 'sub_transfer']
+    active_genes = [0, 0, 0, 0, 0, 0, 0]
+    active_gene_count = 0
 
     b = 1.5
     m = 0.5
@@ -222,6 +263,53 @@ class Household(Agent, IDecodable):
         created_dict['peer_chance'] = self[HouseholdRelationshipComponent].peer_resource_transfer_chance
         created_dict['sub_chance'] = self[HouseholdRelationshipComponent].sub_resource_transfer_chance
 
+        return created_dict
+
+
+class RBAdaptiveHousehold(Household):
+    """ This Agent-Type is heavily inspired by the agents described by Hailegiorgis, Crooks and Cioffi-Revilla in their
+    paper titled 'An Agent-Based Model for Rural Households Adaptation to Climate Change"""
+
+    def __init__(self, id: str, model: Model, settlementID: int):
+        super().__init__(id, model, settlementID)
+
+        self.addComponent(HouseholdRBAdaptiveComponent(self, model))
+
+    @staticmethod
+    def decode(params: dict):
+        ResourceComponent.age_of_maturity = params['age_of_maturity']
+        ResourceComponent.consumption_rate = params['consumption_rate']
+        ResourceComponent.carrying_capacity = params['carrying_capacity']
+        ResourceComponent.vision_square = params['vision_square']
+        ResourceComponent.child_factor = params['child_factor']
+
+        HouseholdRelationshipComponent.load_difference = params['load_difference']
+
+        HouseholdRBAdaptiveComponent.yrs_to_look_back = params['yrs_to_look_back']
+        HouseholdRBAdaptiveComponent.yr_look_back_weights = params['yr_look_back_weights']
+
+        HouseholdRBAdaptiveComponent.max_labour_adapt_size = params['max_labour_adapt_size']
+
+        HouseholdRBAdaptiveComponent.risk_elasticity = params['risk_elasticity']
+        HouseholdRBAdaptiveComponent.cognitive_bias = params['cognitive_bias']
+
+        HouseholdRBAdaptiveComponent.adaptation_intention_threshold = params['adaptation_intention_threshold']
+        HouseholdRBAdaptiveComponent.learning_rate = params['learning_rate']
+
+        agent = RBAdaptiveHousehold(params['agent_index'], params['model'], -1)
+        for i in range(params['init_occupants']):
+            age = agent.model.random.randrange(params['init_age_range'][0], params['init_age_range'][1])
+            agent[ResourceComponent].add_occupant(agent[ResourceComponent].get_next_id(), age)
+        return agent
+
+    def __str__(self):
+        return super().__str__() + '\n\tProbability to Farm: '.format(
+            self[HouseholdRBAdaptiveComponent].percentage_to_farm)
+
+    def jsonify(self) -> dict:
+        created_dict = super().jsonify()
+
+        created_dict['percentage_to_farm'] = self[HouseholdRBAdaptiveComponent].percentage_to_farm
         return created_dict
 
 
@@ -289,8 +377,20 @@ class IEHousehold(PreferenceHousehold):
         IEComponent.m = params['m']
         IEComponent.mutation_rate = params['mutation_rate']
 
+        # Enable / Disable Certain Genes
+        if 'genes' in params:
+            if 'active' in params['genes']:
+                IEComponent.active_genes = params['genes']['active']
+            for i, key in enumerate(IEComponent.gene_names):
+                IEComponent.active_genes[i] = 1 if key in params['genes'] else 0
+        else:
+            IEComponent.active_genes = [1, 1, 1, 1, 1, 1, 1]
+
+        IEComponent.active_genes_count = sum(IEComponent.active_genes)
+
+
         agent = IEHousehold(params['agent_index'], params['model'], -1, params['init_preference'])
-        for i in range(params['init_occupants']):
+        for _ in range(params['init_occupants']):
             age = agent.model.random.randrange(params['init_age_range'][0], params['init_age_range'][1])
             agent[ResourceComponent].add_occupant(agent[ResourceComponent].get_next_id(), age)
         return agent
@@ -582,6 +682,12 @@ class AgentResourceAcquisitionSystem(System, IDecodable, ILoggable):
 
     storage_yrs = 1
 
+    # Traditional Agent parameters
+    forage_grad = 1.0
+    forage_offset = 0.0
+    forage_duration = 1.0
+    forage_margin = 0.0
+
     @staticmethod
     def decode(params: dict):
         AgentResourceAcquisitionSystem.farms_per_patch = params['farms_per_patch']
@@ -593,6 +699,22 @@ class AgentResourceAcquisitionSystem(System, IDecodable, ILoggable):
         AgentResourceAcquisitionSystem.forage_consumption_rate = params['forage_consumption_rate']
         AgentResourceAcquisitionSystem.forage_production_multiplier = params['forage_production_multiplier']
         AgentResourceAcquisitionSystem.storage_yrs = params['storage_yrs']
+
+        # Optional forage behaviour for traditional agent
+        if 'forage_grad' in params:
+            AgentResourceAcquisitionSystem.forage_grad = params['forage_grad']
+
+        if 'forage_offset' in params:
+            AgentResourceAcquisitionSystem.forage_offset = params['forage_offset']
+
+        if 'forage_duration' in params:
+            AgentResourceAcquisitionSystem.forage_duration = params['forage_duration']
+        else:
+            AgentResourceAcquisitionSystem.forage_duration = NeoCOOP.iterations
+
+        if 'forage_margin' in params:
+            AgentResourceAcquisitionSystem.forage_margin = params['forage_margin']
+
         return AgentResourceAcquisitionSystem(params['id'], params['model'], params['priority'])
 
     def __init__(self, id: str, model: Model,priority):
@@ -640,6 +762,12 @@ class AgentResourceAcquisitionSystem(System, IDecodable, ILoggable):
         # Return the neighbour count property to allow for faster searching of available farmland.
         return neighbour_count
 
+    def get_traditional_farm_threshold(self):
+        return (AgentResourceAcquisitionSystem.forage_grad * self.model.systemManager.timestep +
+                AgentResourceAcquisitionSystem.forage_offset
+                )/AgentResourceAcquisitionSystem.forage_duration + self.model.random.uniform(
+            -AgentResourceAcquisitionSystem.forage_margin, AgentResourceAcquisitionSystem.forage_margin)
+
     def execute(self):
 
         start_time = time.time()
@@ -650,9 +778,9 @@ class AgentResourceAcquisitionSystem(System, IDecodable, ILoggable):
         settlement_cells = self.model.environment.cells['isSettlement'].to_numpy()
         vegetation_cells = self.model.environment.cells['vegetation'].to_numpy()
         moisture_cells = self.model.environment.cells['moisture'].to_numpy()
-        height_cells = self.model.environment.cells['height'].to_numpy()
+        height_cells = self.model.environment.cells[NeoCOOP.HEIGHT_KEY].to_numpy()
         position_cells = self.model.environment.cells['pos']  # Not passed to Cython so it doesn't need to be np.array
-        slope_cells = self.model.environment.cells['slope'].to_numpy()
+        slope_cells = self.model.environment.cells[NeoCOOP.SLOPE_KEY].to_numpy()
 
         # This is just for dynamic programming purposes
         settlement_forage_land = {}
@@ -680,10 +808,18 @@ class AgentResourceAcquisitionSystem(System, IDecodable, ILoggable):
             able_workers = household[ResourceComponent].able_workers()
             max_farm = math.ceil(able_workers / AgentResourceAcquisitionSystem.farms_per_patch)
 
-            farm_threshold = household[HouseholdPreferenceComponent].prev_hunger + (1.0 * self.model.systemManager.timestep / self.model.iterations)
+            is_phouse = household.hasComponent(HouseholdPreferenceComponent)
 
-            numToFarm = CAgentResourceAcquisitionFunctions.num_to_farm_phouse(farm_threshold, max_farm, self.model.random,
+            if is_phouse: # Utility and IE Agents
+                farm_threshold = household[ResourceComponent].prev_satisfaction
+                numToFarm = CAgentResourceAcquisitionFunctions.num_to_farm_phouse(farm_threshold, max_farm, self.model.random,
                                                                               household[HouseholdPreferenceComponent].farm_utility, household[HouseholdPreferenceComponent].forage_utility)
+            else:
+                if not household.hasComponent(HouseholdRBAdaptiveComponent): # Traditional Agent
+                    farm_threshold = self.get_traditional_farm_threshold()
+                else: # RB-Adaptive Agent
+                    farm_threshold = household[HouseholdRBAdaptiveComponent].percentage_to_farm
+                numToFarm = CAgentResourceAcquisitionFunctions.num_to_farm(farm_threshold, max_farm, self.model.random)
 
 
             numToForage = max_farm - numToFarm
@@ -772,7 +908,8 @@ class AgentResourceAcquisitionSystem(System, IDecodable, ILoggable):
             household[ResourceComponent].storage_decay.append(totalFarm + totalForage)
 
             # Adjust the farm_preference based on number of resources acquired
-            AgentResourceAcquisitionSystem.adjust_farm_preference(household, totalForage + totalFarm,
+            if is_phouse:
+                AgentResourceAcquisitionSystem.adjust_farm_preference(household, totalForage + totalFarm,
                                                                   totalFarm/numToFarm if numToFarm != 0 else 0.0, totalForage/numToForage if numToForage != 0 else 0.0)
 
         # Update Environment Dataframe
@@ -889,7 +1026,7 @@ class AgentResourceTransferSystem(System, IDecodable, ILoggable):
                         if resource_given > 0:
                             log_string += 'HOUSEHOLD.RESOURCES.TRANSFER.PEER: {} {} {}\n'.format(
                                 household.id, provider.id, resource_given)
-                        else:  # Household has not more resources left so we remove it to save on computation time later
+                        else:  # Household has no more resources left so we remove it to save on computation time later
                             excess_households.remove(provider)
                             peer_households.remove(provider)
 
@@ -1024,7 +1161,14 @@ class AgentPopulationSystem(System, IDecodable, ILoggable):
 
         self.logger.info('HOUSEHOLD.SPLIT: {}'.format(household.id))
 
-        new_household = IEHousehold(self.num_households, self.model, -1, 0.0)
+        if household.hasComponent(IEComponent):
+            new_household = IEHousehold(self.num_households, self.model, -1, 0.0)
+        elif household.hasComponent(HouseholdPreferenceComponent):
+            new_household = PreferenceHousehold(self.num_households, self.model, -1, 0.0)
+        elif household.hasComponent(HouseholdRBAdaptiveComponent):
+            new_household = RBAdaptiveHousehold(self.num_households, self.model, -1)
+        else:
+            new_household = Household(self.num_households, self.model, -1)
 
         self.model.environment.addAgent(new_household)
         # Add to settlement
@@ -1046,6 +1190,7 @@ class AgentPopulationSystem(System, IDecodable, ILoggable):
         # Copy across hunger and satisfaction values
         new_household[ResourceComponent].hunger = household[ResourceComponent].hunger
         new_household[ResourceComponent].satisfaction = household[ResourceComponent].satisfaction
+        new_household[ResourceComponent].prev_satisfaction = household[ResourceComponent].prev_satisfaction
 
         # Split land
         num_to_split = len(household[ResourceComponent].ownedLand) // 2
@@ -1094,92 +1239,106 @@ class AgentPopulationSystem(System, IDecodable, ILoggable):
             children.remove(id)
             child_count -= 1
 
-        sr_comp = self.model.environment[SettlementRelationshipComponent]
-        # Determine Parents using neighbouring settlements and households
-        # Settlements get a penalty associated with the xtent formula to promote within settlement gene crossover
-        parents = [household, self.determine_parent(sID, new_household)]
+        # Determine how to set the child values based on agent type
+        if not new_household.hasComponent(IEComponent):
+            # Set Household Resource Trading Personality Types
+            new_household[HouseholdRelationshipComponent].peer_resource_transfer_chance = household[
+                HouseholdRelationshipComponent].peer_resource_transfer_chance
+            new_household[HouseholdRelationshipComponent].sub_resource_transfer_chance = household[
+                HouseholdRelationshipComponent].sub_resource_transfer_chance
+            new_household[ResourceComponent].attachment = household[ResourceComponent].attachment
 
-        # Determine Gene Array
-        parent_indices = [self.model.random.randint(0, 1) for _ in range(7)]
-        # And if mutation should occur
-        mutate_arr = [self.model.random.random() for _ in range(7)]
+            # Set for Utility Agent
+            if new_household.hasComponent(HouseholdPreferenceComponent):
+                new_household[HouseholdPreferenceComponent].prev_hunger = household[HouseholdPreferenceComponent].prev_hunger
+                new_household[HouseholdPreferenceComponent].forage_utility = household[HouseholdPreferenceComponent].forage_utility
+                new_household[HouseholdPreferenceComponent].farm_utility = household[HouseholdPreferenceComponent].farm_utility
+                new_household[HouseholdPreferenceComponent].learning_rate = household[HouseholdPreferenceComponent].learning_rate
+            # Set for RB-agent
+            elif new_household.hasComponent(HouseholdRBAdaptiveComponent):
+                new_household[HouseholdRBAdaptiveComponent].rainfall_memory = [
+                    x for x in household[HouseholdRBAdaptiveComponent].rainfall_memory
+                ]
 
-        # Set Household Resource Trading Personality Types with mutation
-        # Peer Resource Transfer
-        if mutate_arr[0] > IEComponent.mutation_rate:
-            new_household[HouseholdRelationshipComponent].peer_resource_transfer_chance = parents[
-                parent_indices[0]][HouseholdRelationshipComponent].peer_resource_transfer_chance
+                new_household[HouseholdRBAdaptiveComponent].flood_memory = [
+                    x for x in household[HouseholdRBAdaptiveComponent].flood_memory
+                ]
+                new_household[HouseholdRBAdaptiveComponent].percentage_to_farm = household[HouseholdRBAdaptiveComponent].percentage_to_farm
         else:
-            new_household[HouseholdRelationshipComponent].peer_resource_transfer_chance = self.model.random.random()
-            self.logger.info('MUTATE.HOUSEHOLD.PEER_TRANSFER: {}'.format(new_household.id))
+            sr_comp = self.model.environment[SettlementRelationshipComponent]
+            # Determine Parents using neighbouring settlements and households
+            # Settlements get a penalty associated with the xtent formula to promote within settlement gene crossover
+            parents = [household, self.determine_parent(sID, new_household)]
 
-        # Sub Resource Transfer
-        if mutate_arr[1] > IEComponent.mutation_rate:
-            new_household[HouseholdRelationshipComponent].sub_resource_transfer_chance = parents[
-                parent_indices[1]][HouseholdRelationshipComponent].sub_resource_transfer_chance
-        else:
-            new_household[HouseholdRelationshipComponent].sub_resource_transfer_chance = self.model.random.random()
-            self.logger.info('MUTATE.HOUSEHOLD.SUB_TRANSFER: {}'.format(new_household.id))
+            # Determine Gene Array
+            parent_indices = [self.model.random.randint(0, 1) for _ in range(len(IEComponent.active_genes))]
+            # And if mutation should occur
+            mutate_arr = [self.model.random.random() if IEComponent.active_genes[i] > 0 else 1.0
+                          for i in range(len(IEComponent.active_genes))]
 
-        # Set Preference
-        new_household[HouseholdPreferenceComponent].prev_hunger = household[
-            HouseholdPreferenceComponent].prev_hunger
+            # Set Household Resource Trading Personality Types with mutation
+            # Peer Resource Transfer
+            if mutate_arr[5] > IEComponent.mutation_rate:
+                new_household[HouseholdRelationshipComponent].peer_resource_transfer_chance = parents[
+                    parent_indices[0]][HouseholdRelationshipComponent].peer_resource_transfer_chance
+            else:
+                new_household[HouseholdRelationshipComponent].peer_resource_transfer_chance = self.model.random.random()
+                self.logger.info('MUTATE.HOUSEHOLD.PEER_TRANSFER: {}'.format(new_household.id))
 
-        # Forage Utility
-        if mutate_arr[2] > IEComponent.mutation_rate:
-            new_household[HouseholdPreferenceComponent].forage_utility = parents[parent_indices[2]][
-                HouseholdPreferenceComponent].forage_utility
-        else:
-            new_household[HouseholdPreferenceComponent].forage_utility = self.model.random.gauss(
-                parents[parent_indices[2]][HouseholdPreferenceComponent].forage_utility,
-                sr_comp.get_forage_utility_std(sID))
+            # Sub Resource Transfer
+            if mutate_arr[6] > IEComponent.mutation_rate:
+                new_household[HouseholdRelationshipComponent].sub_resource_transfer_chance = parents[
+                    parent_indices[1]][HouseholdRelationshipComponent].sub_resource_transfer_chance
+            else:
+                new_household[HouseholdRelationshipComponent].sub_resource_transfer_chance = self.model.random.random()
+                self.logger.info('MUTATE.HOUSEHOLD.SUB_TRANSFER: {}'.format(new_household.id))
 
-            self.logger.info('MUTATE.HOUSEHOLD.FORAGE_UTILITY: {}'.format(new_household.id))
+            # Set Preference
+            new_household[HouseholdPreferenceComponent].prev_hunger = household[
+                HouseholdPreferenceComponent].prev_hunger
 
-        # Farm Utility
-        if mutate_arr[3] > IEComponent.mutation_rate:
-            new_household[HouseholdPreferenceComponent].farm_utility = parents[parent_indices[3]][
-                HouseholdPreferenceComponent].farm_utility
-        else:
-            new_household[HouseholdPreferenceComponent].farm_utility = self.model.random.gauss(
-                parents[parent_indices[3]][HouseholdPreferenceComponent].farm_utility,
-                sr_comp.get_farm_utility_std(sID))
+            # Forage Utility
+            if mutate_arr[0] > IEComponent.mutation_rate:
+                new_household[HouseholdPreferenceComponent].forage_utility = parents[parent_indices[2]][
+                    HouseholdPreferenceComponent].forage_utility
+            else:
+                new_household[HouseholdPreferenceComponent].forage_utility = self.model.random.gauss(
+                    parents[parent_indices[2]][HouseholdPreferenceComponent].forage_utility,
+                    sr_comp.get_forage_utility_std(sID))
 
-            self.logger.info('MUTATE.HOUSEHOLD.FARM_UTILITY: {}'.format(new_household.id))
+                self.logger.info('MUTATE.HOUSEHOLD.FORAGE_UTILITY: {}'.format(new_household.id))
 
-        # Learning Rate
-        if mutate_arr[4] > IEComponent.mutation_rate:
-            new_household[HouseholdPreferenceComponent].learning_rate = parents[parent_indices[4]][
-                HouseholdPreferenceComponent].learning_rate
-        else:
-            new_household[HouseholdPreferenceComponent].learning_rate = self.model.random.gauss(
-                parents[parent_indices[4]][HouseholdPreferenceComponent].learning_rate,
-                sr_comp.get_learning_rate_std(sID))
+            # Farm Utility
+            if mutate_arr[1] > IEComponent.mutation_rate:
+                new_household[HouseholdPreferenceComponent].farm_utility = parents[parent_indices[3]][
+                    HouseholdPreferenceComponent].farm_utility
+            else:
+                new_household[HouseholdPreferenceComponent].farm_utility = self.model.random.gauss(
+                    parents[parent_indices[3]][HouseholdPreferenceComponent].farm_utility,
+                    sr_comp.get_farm_utility_std(sID))
 
-            if new_household[HouseholdPreferenceComponent].learning_rate < 0.01:
-                new_household[HouseholdPreferenceComponent].learning_rate = 0.01
+                self.logger.info('MUTATE.HOUSEHOLD.FARM_UTILITY: {}'.format(new_household.id))
 
-            self.logger.info('MUTATE.HOUSEHOLD.STUBBORNESS: {}'.format(new_household.id))
+            # Learning Rate
+            if mutate_arr[3] > IEComponent.mutation_rate:
+                new_household[HouseholdPreferenceComponent].learning_rate = parents[parent_indices[4]][
+                    HouseholdPreferenceComponent].learning_rate
+            else:
+                new_household[HouseholdPreferenceComponent].learning_rate = self.model.random.uniform(*HouseholdPreferenceComponent.learning_rate_range)
+                self.logger.info('MUTATE.HOUSEHOLD.STUBBORNNESS: {}'.format(new_household.id))
 
-        # Conformity
-        if mutate_arr[5] > IEComponent.mutation_rate:
-            new_household[IEComponent].conformity = parents[parent_indices[5]][IEComponent].conformity
-        else:
-            new_household[IEComponent].conformity = self.model.random.gauss(
-                parents[parent_indices[5]][IEComponent].conformity,
-                sr_comp.get_conformity_std(sID))
+            # Conformity
+            if mutate_arr[4] > IEComponent.mutation_rate:
+                new_household[IEComponent].conformity = parents[parent_indices[5]][IEComponent].conformity
+            else:
+                new_household[IEComponent].conformity = self.model.random.uniform(*IEComponent.conformity_range)
+                self.logger.info('MUTATE.HOUSEHOLD.CONFORMITY: {}'.format(new_household.id))
 
-            if new_household[IEComponent].conformity < 0.01:
-                new_household[IEComponent].conformity = 0.01
-
-            self.logger.info('MUTATE.HOUSEHOLD.CONFORMITY: {}'.format(new_household.id))
-
-        # Attachment
-        if mutate_arr[6] > IEComponent.mutation_rate:
-            new_household[ResourceComponent].attachment = parents[parent_indices[6]][ResourceComponent].attachment
-        else:
-            new_household[ResourceComponent].attachment = self.model.random.random()
-            self.logger.info('MUTATE.HOUSEHOLD.ATTACHMENT: {}'.format(new_household.id))
+            if mutate_arr[2] > IEComponent.mutation_rate:
+                new_household[ResourceComponent].attachment = parents[parent_indices[6]][ResourceComponent].attachment
+            else:
+                new_household[ResourceComponent].attachment = self.model.random.random()
+                self.logger.info('MUTATE.HOUSEHOLD.ATTACHMENT: {}'.format(new_household.id))
 
 
         self.num_households += 1
@@ -1212,6 +1371,7 @@ class AgentPopulationSystem(System, IDecodable, ILoggable):
                     self.reallocate_agent(household)
 
                 household[ResourceComponent].satisfaction = 0.0  # Reset satisfaction
+                household[ResourceComponent].prev_satisfaction = moveProb # Average hunger of the agent over the last iter_since_last_move iterations
                 household[ResourceComponent].iter_since_last_move = 0 # Reset iterations since last move
 
             # Birth Chance
@@ -1316,7 +1476,7 @@ class AgentPopulationSystem(System, IDecodable, ILoggable):
         else:
             # Assign new household position if agent chooses to not move to an existing settlement
             # This checks to see if someone else from the settlement has moved and, if so, the household follows them,
-            # else a new settlement may be created. This creates grouped migration.
+            # else a new settlement may be created. This creates collective migration.
             if old_sid not in self.settlement_move_locs:
 
                 # First check to see if household moves a one of the newly created settlements,
@@ -1387,7 +1547,7 @@ class AgentPopulationSystem(System, IDecodable, ILoggable):
         pos_ids = [sr_comp.settlements[s].pos[0] for s in ss]
         # Calculate the distances
         ds = np.sqrt(np.array([((pos_series[pos][0] - self_pos[0]) ** 2 + (pos_series[pos][1] - self_pos[1]) ** 2)
-                               for pos in pos_ids])) * self.model.cellSize
+                               for pos in pos_ids])) * self.model.cell_size
 
         xtent_dst = CAgentUtilityFunctions.xtent_distribution(ws, ds, IEComponent.b, IEComponent.m)
 
@@ -1435,6 +1595,97 @@ class AgentPopulationSystem(System, IDecodable, ILoggable):
                                      params['cell_capacity'])
 
 
+class AgentRBAdaptationSystem(System, IDecodable, ILoggable):
+
+    def __init__(self,id: str, model: Model, priority: int):
+        System.__init__(self, id, model, priority=priority)
+        IDecodable.__init__(self)
+        ILoggable.__init__(self, 'model.RBAS')
+
+    def execute(self):
+
+        for settlement in [self.model.environment[SettlementRelationshipComponent].settlements[s] for s in
+                           self.model.environment[SettlementRelationshipComponent].settlements]:
+
+            # Get settlement mean properties
+            peer_resource_chances_mean = statistics.mean( [hs[i][HouseholdRelationshipComponent].peer_resource_transfer_chance for i in range(len(hs))] )
+            sub_resource_chances_mean = statistics.mean( [hs[i][HouseholdRelationshipComponent].sub_resource_transfer_chance for i in range(len(hs))] )
+            attachment_mean = statistics.mean( [hs[i][ResourceComponent].attachment for i in range(len(hs))] )
+            farm_mean = statistics.mean( [h[HouseholdRBAdaptiveComponent].percentage_to_farm for h in hs] )
+
+            for agent in [self.model.environment.getAgent(h) for h in settlement.occupants]:
+
+                adapt_comp = agent[HouseholdRBAdaptiveComponent]
+
+                severity = 1.0 - agent[ResourceComponent].hunger
+
+                # Calculate risk appraisal
+                risk_appraisal = 0.6 * severity + 0.4 * self.model.random.random()
+
+                # Calculate Adaptation Appraisal
+                w_age = 1.0 - (0.12 / (0.12 + (min(50.0, res_comp.average_age()) / 50.0) ** 3))
+
+                # Here we use household capacity
+                w_hh_size = 1.0 - (0.12 / (0.12 + (
+                        min(ResourceComponent.carrying_capacity, res_comp.able_workers()
+                            ) / ResourceComponent.carrying_capacity) ** 3))
+
+                adaptation_efficacy = 0.55 * w_age + 0.45 * w_hh_size + (0.2 - 0.3 * self.model.random.random())
+
+                w_wealth = 1.0 / (1.0 + math.exp(-3.0 * ((res_comp.resources / res_comp.required_resources()) - 0.5)))
+
+                self_efficacy = 0.3 * w_wealth + 0.6 * adapt_comp.percentage_to_farm + (0.1 - 0.2 * self.model.random.random())
+
+                adaptation_appraisal = 0.5 * (adaptation_efficacy + self_efficacy)
+
+                if adaptation_appraisal < 0.0:
+                    adaptation_appraisal = 0.0
+                elif adaptation_appraisal > 1.0:
+                    adaptation_appraisal = 1.0
+
+                # Calculate Adaptation Intention
+                # Note: There is no adaptation cost in this model
+                r = HouseholdRBAdaptiveComponent.risk_elasticity * risk_appraisal
+                p = adaptation_appraisal * (1 - HouseholdRBAdaptiveComponent.cognitive_bias)
+
+                adaptation_intention = p - r
+
+                adaptation_modifier = 0.0  # Assume Maladaptation
+                # Now determine if successful adaptation vs. maladaptation occurs
+                if adaptation_intention > HouseholdRBAdaptiveComponent.adaptation_intention_threshold:
+                    # Adaptation Occurs
+                    adaptation_modifier = HouseholdRBAdaptiveComponent.learning_rate
+                    self.logger.info('HOUSEHOLD.ADAPTATION.INTENDED: {}'.format(agent.id))
+                elif self.model.random.random() < 0.01:  # Described as Ingenuity Change
+                    adaptation_modifier = HouseholdRBAdaptiveComponent.learning_rate * self.model.random.random()
+                    self.logger.info('HOUSEHOLD.ADAPTATION.INGENUITY: {}'.format(agent.id))
+
+                if adaptation_modifier > 0.0:
+                    # Update adaptation value
+                    adaptation_modifier *= HouseholdRBAdaptiveComponent.learning_rate
+
+                    peer_trade_modifier = (peer_resource_chances_mean - agent[
+                        HouseholdRelationshipComponent].peer_resource_transfer_chance
+                                           ) * adaptation_modifier
+
+                    sub_trade_modifier = (sub_resource_chances_mean - agent[
+                        HouseholdRelationshipComponent].sub_resource_transfer_chance
+                                          ) * adaptation_modifier
+
+                    attachment_modifier = (attachment_mean - agent[ResourceComponent].attachment) * adaptation_modifier
+
+                    farm_modifier = (farm_mean - agent[HouseholdRBAdaptiveComponent].farm_threshold) * adaptation_modifier
+
+                    agent[HouseholdRelationshipComponent].peer_resource_transfer_chance += peer_trade_modifier
+                    agent[HouseholdRelationshipComponent].sub_resource_transfer_chance += sub_trade_modifier
+                    agent[ResourceComponent].attachment += attachment_modifier
+                    agent[HouseholdRBAdaptiveComponent].farm_threshold += farm_modifier
+
+    @staticmethod
+    def decode(params: dict):
+        return AgentRBAdaptationSystem(params['id'], params['model'], params['priority'])
+
+
 class BeliefSpace:
     """ This is a container class for belief space construction and influence """
     def __init__(self, forage_utility, farm_utility, learning_rate, conformity, peer_transfer, sub_transfer, attachment):
@@ -1447,14 +1698,28 @@ class BeliefSpace:
         self.attachment = attachment
 
     def influence(self, bs, dst_penalty: float):
-        self.forage_utility += (bs.forage_utility - self.forage_utility) * self.conformity * dst_penalty
-        self.farm_utility += (bs.farm_utility - self.farm_utility) * self.conformity * dst_penalty
-        self.learning_rate += (bs.learning_rate - self.learning_rate) * self.conformity * dst_penalty
-        self.peer_transfer += (bs.peer_transfer - self.peer_transfer) * self.conformity * dst_penalty
-        self.sub_transfer += (bs.sub_transfer - self.sub_transfer) * self.conformity * dst_penalty
-        self.attachment += (bs.attachment - self.attachment) * self.conformity * dst_penalty
+
+        if IEComponent.active_genes[0] > 0:
+            self.forage_utility += (bs.forage_utility - self.forage_utility) * self.conformity * dst_penalty
+
+        if IEComponent.active_genes[1] > 0:
+            self.farm_utility += (bs.farm_utility - self.farm_utility) * self.conformity * dst_penalty
+
+        if IEComponent.active_genes[2] > 0:
+            self.attachment += (bs.attachment - self.attachment) * self.conformity * dst_penalty
+
+        if IEComponent.active_genes[3] > 0:
+            self.learning_rate += (bs.learning_rate - self.learning_rate) * self.conformity * dst_penalty
+
+        if IEComponent.active_genes[5] > 0:
+            self.peer_transfer += (bs.peer_transfer - self.peer_transfer) * self.conformity * dst_penalty
+
+        if IEComponent.active_genes[6] > 0:
+            self.sub_transfer += (bs.sub_transfer - self.sub_transfer) * self.conformity * dst_penalty
+
         # Do Conformity Last so it doesn't affect the other results.
-        self.conformity += (bs.conformity - self.conformity) * self.conformity * dst_penalty
+        if IEComponent.active_genes[4] > 0:
+            self.conformity += (bs.conformity - self.conformity) * self.conformity * dst_penalty
 
     def jsonify(self):
         return {
@@ -1475,7 +1740,6 @@ class BeliefSpace:
 class AgentIEAdaptationSystem(System, IDecodable, ILoggable):
     """ This System Manages the Cultural Algorithm that allows for peer influenced agent adaptation """
     influence_rate = 0.05
-    novelty_rate = 0.05
     influence_type = 'AVG'
     persist_belief_space = False
 
@@ -1523,7 +1787,7 @@ class AgentIEAdaptationSystem(System, IDecodable, ILoggable):
             pos_ids = [pos_dict[s] for s in ss]
             # Calculate the distances
             ds = np.sqrt(np.array([((pos_series[pos][0] - self_pos[0]) ** 2 + (pos_series[pos][1] - self_pos[1]) ** 2)
-                                   for pos in pos_ids])) * self.model.cellSize
+                                   for pos in pos_ids])) * self.model.cell_size
 
             xtent_dst = CAgentUtilityFunctions.xtent_distribution(ws, ds, IEComponent.b, IEComponent.m)
 
@@ -1540,6 +1804,8 @@ class AgentIEAdaptationSystem(System, IDecodable, ILoggable):
             if settlement.id not in normative_prob:  # If no settlement can influence s, it influences itself with 100%
                 normative_prob[settlement.id] = 1.0
 
+        mutate_choices = [i for i in range(len(IEComponent.active_genes)) if IEComponent.active_genes[i] > 0]
+
         # Influence Each Household using Updated Settlement belief spaces
         for agent in self.model.environment.getAgents():
             sID = agent[HouseholdRelationshipComponent].settlementID
@@ -1547,26 +1813,24 @@ class AgentIEAdaptationSystem(System, IDecodable, ILoggable):
                 # Choose which belief space is going to influence the agent
                 # First we check for novelty
                 if self.model.random.random() < IEComponent.mutation_rate:
-                    index = self.model.random.randint(0, 6)
+                    index = self.model.random.choice(mutate_choices)
 
-                    if index == 0:  # Peer Transfer
-                        agent[HouseholdRelationshipComponent].peer_resource_transfer_chance = self.model.random.random()
-                    elif index == 1:  # Sub Transfer
-                        agent[HouseholdRelationshipComponent].sub_resource_transfer_chance = self.model.random.random()
-                    elif index == 2:  # Forage Utility
+                    if index == 0:  # Forage Utility
                         agent[HouseholdPreferenceComponent].forage_utility = self.model.random.gauss(
                             agent[HouseholdPreferenceComponent].forage_utility, sr_comp.get_forage_utility_std(sID))
-                    elif index == 3:  # Farm Utility
+                    elif index == 1:  # Farm Utility
                         agent[HouseholdPreferenceComponent].farm_utility = self.model.random.gauss(
                             agent[HouseholdPreferenceComponent].farm_utility, sr_comp.get_farm_utility_std(sID))
-                    elif index == 4:  # Learning Rate
-                        agent[HouseholdPreferenceComponent].learning_rate = self.model.random.gauss(
-                            agent[HouseholdPreferenceComponent].learning_rate, sr_comp.get_learning_rate_std(sID))
-                    elif index == 5:
+                    elif index == 2: # Attachment
                         agent[ResourceComponent].attachment = self.model.random.random()
-                    else:  # Conformity
-                        agent[IEComponent].conformity = max(0.01, self.model.random.gauss(
-                            agent[IEComponent].conformity, sr_comp.get_conformity_std(sID)))
+                    elif index == 3:  # Learning Rate
+                        agent[HouseholdPreferenceComponent].learning_rate = self.model.random.uniform(*HouseholdPreferenceComponent.learning_rate_range)
+                    elif index == 4:  # Conformity
+                        agent[IEComponent].conformity = self.model.random.uniform(*IEComponent.conformity_range)
+                    elif index == 5:  # Peer Transfer
+                        agent[HouseholdRelationshipComponent].peer_resource_transfer_chance = self.model.random.random()
+                    elif index == 6:  # Sub Transfer
+                        agent[HouseholdRelationshipComponent].sub_resource_transfer_chance = self.model.random.random()
 
                     log_string += 'HOUSEHOLD.INFLUENCE.DOMAIN: {}\n'.format(agent.id)
                 else:
@@ -1586,34 +1850,51 @@ class AgentIEAdaptationSystem(System, IDecodable, ILoggable):
     def influence_agent(agent: IEHousehold, bs: BeliefSpace):
 
         # Apply principles of Homophily (like attracts like)
-        # Current assumes the values are normalized [0,1]
-        similarity  = 1.0 - np.mean([
-            #abs(bs.forage_utility - agent[HouseholdPreferenceComponent].forage_utility),
-            #abs(bs.farm_utility - agent[HouseholdPreferenceComponent].farm_utility),
-            #abs(bs.learning_rate - agent[HouseholdPreferenceComponent].learning_rate),
-            abs(bs.conformity - agent[IEComponent].conformity),
+        matrix = np.array([
+            1.0 - abs(bs.forage_utility - agent[HouseholdPreferenceComponent].forage_utility) / max(bs.forage_utility, agent[HouseholdPreferenceComponent].forage_utility),
+            1.0 - abs(bs.farm_utility - agent[HouseholdPreferenceComponent].farm_utility) / max(bs.farm_utility, agent[HouseholdPreferenceComponent].farm_utility),
+            abs(bs.attachment - agent[ResourceComponent].attachment),
+            abs(bs.learning_rate - agent[HouseholdPreferenceComponent].learning_rate) / (
+                    HouseholdPreferenceComponent.learning_rate_range[1] - HouseholdPreferenceComponent.learning_rate_range[0]),
+
+            abs(bs.conformity - agent[IEComponent].conformity) / (IEComponent.conformity_range[1] - IEComponent.conformity_range[0]),
+
             abs(bs.peer_transfer - agent[HouseholdRelationshipComponent].peer_resource_transfer_chance),
-            abs(bs.sub_transfer - agent[HouseholdRelationshipComponent].sub_resource_transfer_chance),
-            abs(bs.attachment - agent[ResourceComponent].attachment)
+            abs(bs.sub_transfer - agent[HouseholdRelationshipComponent].sub_resource_transfer_chance)
         ])
 
+        flag = np.array(IEComponent.active_genes)
+
+        matrix = matrix[flag > 0]
+        similarity  = 1.0 - np.mean(matrix)
+
         conformity = agent[IEComponent].conformity * similarity
-        agent[HouseholdPreferenceComponent].forage_utility += (bs.forage_utility - agent[HouseholdPreferenceComponent
-        ].forage_utility) * conformity
 
-        agent[HouseholdPreferenceComponent].farm_utility += (bs.farm_utility - agent[HouseholdPreferenceComponent
-        ].farm_utility) * conformity
+        if IEComponent.active_genes[0] > 0:
+            agent[HouseholdPreferenceComponent].forage_utility += (bs.forage_utility - agent[HouseholdPreferenceComponent
+                ].forage_utility) * conformity
 
-        agent[HouseholdPreferenceComponent].learning_rate += (bs.learning_rate - agent[HouseholdPreferenceComponent
-        ].learning_rate) * conformity
+        if IEComponent.active_genes[1] > 0:
+            agent[HouseholdPreferenceComponent].farm_utility += (bs.farm_utility - agent[HouseholdPreferenceComponent
+            ].farm_utility) * conformity
 
-        agent[IEComponent].conformity += (bs.conformity - agent[IEComponent].conformity) * conformity
+        if IEComponent.active_genes[2] > 0:
+            agent[ResourceComponent].attachment += (bs.attachment - agent[ResourceComponent].attachment) * conformity
 
-        agent[HouseholdRelationshipComponent].peer_resource_transfer_chance += (bs.peer_transfer - agent[
+        if IEComponent.active_genes[3] > 0:
+            agent[HouseholdPreferenceComponent].learning_rate += (bs.learning_rate -
+                                            agent[HouseholdPreferenceComponent].learning_rate) * conformity
+
+        if IEComponent.active_genes[4] > 0:
+            agent[IEComponent].conformity += (bs.conformity - agent[IEComponent].conformity) * conformity
+
+        if IEComponent.active_genes[5] > 0:
+            agent[HouseholdRelationshipComponent].peer_resource_transfer_chance += (bs.peer_transfer - agent[
             HouseholdRelationshipComponent].peer_resource_transfer_chance) * conformity
-        agent[HouseholdRelationshipComponent].sub_resource_transfer_chance += (bs.sub_transfer - agent[
+
+        if IEComponent.active_genes[6] > 0:
+            agent[HouseholdRelationshipComponent].sub_resource_transfer_chance += (bs.sub_transfer - agent[
             HouseholdRelationshipComponent].sub_resource_transfer_chance) * conformity
-        agent[ResourceComponent].attachment += (bs.attachment - agent[ResourceComponent].attachment) * conformity
 
 
     @staticmethod
