@@ -1,7 +1,7 @@
 import numpy as np
 cimport numpy as np
 
-from libc.math cimport cos, sin, exp
+from libc.math cimport cos, sin, exp, log10
 
 # General Functions
 
@@ -48,42 +48,88 @@ cdef class CSoilMoistureSystemFunctions:
         return -3.140 - 0.000000222 * (clay ** 2) - 0.00003484 * (sand_content ** 2) * clay
 
     @staticmethod
-    def wfc(float soil_depth, int sand_content):
-        return soil_depth * lerp(0.3, 0.7, 1 - (sand_content / 100.0))
+    def wfc(int sand_content, int clay_content):
+        # Function returns m3 (of moisture) / m3 (of soil)
+        cdef float wfc = 0.332 - 0.0007251 * sand_content * 0.1276 * log10(clay_content)
+        return  wfc
 
     @staticmethod
-    def SMProcess(df, sm_comp, global_env_comp) -> [float]:
+    def SMProcess(soil_vals, sand_content, clay_content, sm_comp, global_env_comp) -> [float]:
         cdef int i
         cdef float PET
+        cdef np.ndarray[double] EET
+        cdef np.ndarray[double] RDR
 
         # COMPUTE PET Values
-        cdef np.ndarray[double] sand_content = df['sand_content'].to_numpy(dtype=np.double)
-        cdef np.ndarray[double] clay_content = 100 - sand_content
         cdef np.ndarray[double] sand_sqrd = sand_content ** 2
         cdef np.ndarray[double] alpha = (2.71828 ** (-4.396 - 0.0715 * clay_content - 0.000488 * sand_sqrd - 0.00004258 * sand_sqrd * clay_content)) * 100
         cdef np.ndarray[double] beta = -3.140 - 0.000000222 * (clay_content ** 2) - 0.00003484 * sand_sqrd * clay_content
 
-        cdef np.ndarray[double] heightmap = df['height'].to_numpy()
-        cdef np.ndarray[double] soil_vals = df['moisture'].to_numpy()
+        cdef np.ndarray[double] max_vals = (0.332 - 0.0007251 * sand_content * 0.1276 * np.log10(clay_content))
 
-        cdef np.ndarray[double] max_vals = global_env_comp.soil_depth * (0.3 + (0.4 * (1 - sand_content/100.0)))
-        # For Each Month
-        for i in range(12):
+        # Calculate Potential Evaporation
+        PET = CSoilMoistureSystemFunctions.thornthwaite(sm_comp.L, sm_comp.N, global_env_comp.temp,
+                                                        sm_comp.I, sm_comp.alpha) / 1000.0
 
-            # Calculate Potential Evaporation
-            PET = CSoilMoistureSystemFunctions.thornthwaite(sm_comp.L, sm_comp.N, global_env_comp.temp[i],
-                                                            sm_comp.I, sm_comp.alpha)
+        # Calculate new soil values
+        if PET > global_env_comp.rainfall: # When Rainfall is lower than PET
 
-            # Calculate new soil values
-            if PET > global_env_comp.rainfall[i]: # When Rainfall is lower than PET
-                soil_vals = np.maximum(soil_vals - (PET - global_env_comp.rainfall[i]) *
-                        ((1 + alpha) / (1 + alpha * ((soil_vals / global_env_comp.soil_depth) ** beta))), 0)
+            RDR = ((1 + alpha) / (1 + alpha * (soil_vals ** np.maximum(beta, 0.0))))
 
-            else: # When Rainfall is higher than PET
-                soil_vals = soil_vals + (global_env_comp.rainfall[i] - PET)
-                soil_vals = np.minimum(soil_vals, max_vals)
+            EET = np.minimum(global_env_comp.rainfall +  (PET - global_env_comp.rainfall) * RDR,
+                             global_env_comp.rainfall + soil_vals - 0.17)
 
-        return soil_vals
+            soil_vals = np.maximum(soil_vals - (PET - global_env_comp.rainfall) * RDR, 0)
+
+        else: # When Rainfall is higher than PET
+            soil_vals = soil_vals + (global_env_comp.rainfall - PET)
+            soil_vals = np.minimum(soil_vals, max_vals)
+            EET = np.full(len(soil_vals), PET)
+
+
+        return soil_vals, EET / PET
+
+
+    @staticmethod
+    def SMProcess_with_Flood(soil_vals, sand_content, clay_content, height_cells, flood_heights, sm_comp, global_env_comp) -> [float]:
+        cdef int i
+        cdef float PET
+        cdef np.ndarray[double] EET
+        cdef np.ndarray[double] RDR
+
+        # COMPUTE PET Values
+        cdef np.ndarray[double] sand_sqrd = sand_content ** 2
+        cdef np.ndarray[double] alpha = (2.71828 ** (-4.396 - 0.0715 * clay_content - 0.000488 * sand_sqrd - 0.00004258 * sand_sqrd * clay_content)) * 100
+        cdef np.ndarray[double] beta = -3.140 - 0.000000222 * (clay_content ** 2) - 0.00003484 * sand_sqrd * clay_content
+
+        cdef np.ndarray[double] max_vals = (0.332 - 0.0007251 * sand_content * 0.1276 * np.log10(clay_content))
+
+        # Calculate Potential Evaporation
+        PET = CSoilMoistureSystemFunctions.thornthwaite(sm_comp.L, sm_comp.N, global_env_comp.temp,
+                                                        sm_comp.I, sm_comp.alpha) / 1000.0
+
+        cdef np.ndarray is_flooded = height_cells < global_env_comp.flood + flood_heights
+
+        soil_vals = np.where(is_flooded, max_vals, soil_vals)
+
+        # Calculate new soil values
+        if PET > global_env_comp.rainfall: # When Rainfall is lower than PET
+            RDR = ((1 + alpha) / (1 + alpha * (soil_vals ** np.maximum(beta, 0.0))))
+
+            EET = np.minimum(global_env_comp.rainfall +  (PET - global_env_comp.rainfall) * RDR,
+                             global_env_comp.rainfall + soil_vals - 0.17)
+
+            soil_vals = np.maximum(soil_vals - (PET - global_env_comp.rainfall) * RDR, 0)
+
+        else: # When Rainfall is higher than PET
+            soil_vals = soil_vals + (global_env_comp.rainfall - PET)
+            soil_vals = np.minimum(soil_vals, max_vals)
+            EET = np.full(len(soil_vals), PET)
+
+        EET = np.where(is_flooded, PET, EET)
+
+
+        return soil_vals, EET / PET
 
 #######################################################################################################################
 
@@ -114,42 +160,29 @@ cdef class CVegetationGrowthSystemFunctions:
         return CVegetationGrowthSystemFunctions.tOpt(temperature)
 
     @staticmethod
-    def VGProcess(df, vg_comp, sm_comp, ge_comp, area, random) -> ([float], [float]):
+    def VGProcess(veg_cells, eet_cells, slope_cells, vg_comp, sm_comp, ge_comp, area) -> ([float], [float]):
 
         cdef float r
-
-        cdef np.ndarray[double] veg_cells = df['vegetation'].to_numpy()
-        cdef np.ndarray[double] moist_cells = df['moisture'].to_numpy()
-        cdef np.ndarray[double] slope_penalty_cells = df['slope'].to_numpy()
-
         cdef np.ndarray[double] rs = np.zeros(len(veg_cells))
 
-        # Get the available moisture
-        cdef np.ndarray[double] moist_avail = moist_cells - (veg_cells / vg_comp.carry_pop * vg_comp.ideal_moisture)
-
         # Calculate water penalties
-        np.clip(0.5 + moist_avail / vg_comp.ideal_moisture , 0.0, 1.0, out=rs)
-
-        # Calculate remaining moisture
-        np.clip(moist_avail - vg_comp.ideal_moisture, 0.0, None, out=moist_cells)
+        np.clip(0.5 + eet_cells , -1.0, 1.0, out=rs)
 
         # Calculate the temperature penalty
-        rs *=  CVegetationGrowthSystemFunctions.tOpt(np.mean(ge_comp.temp))
+        rs *=  CVegetationGrowthSystemFunctions.tOpt(ge_comp.temp)
 
         # Apply slope penalty
-        rs *= slope_penalty_cells
+        rs *= slope_cells * 0.482
 
 
-        cdef np.ndarray[double] simple_ndvi = 0.023 + 0.611 * (veg_cells / vg_comp.carry_pop)
-        cdef np.ndarray[double] fpar = ((simple_ndvi - 0.023) * 0.94) * 1.637 + 0.01
-        cdef np.ndarray[double] apar = np.sum(ge_comp.solar) * 0.5 * fpar
-        cdef np.ndarray[double] npp = apar * rs
+        cdef np.ndarray[double] ndvi = 0.0163 * (veg_cells ** 0.4831)
+        cdef np.ndarray[double] SR = (1 + ndvi) / (1 - ndvi)
+        cdef np.ndarray[double] fpar = np.minimum( SR / 4.05 - 0.27, 0.95)
+        cdef np.ndarray[double] apar = ge_comp.solar * 0.5 * fpar
+        veg_cells = np.maximum(veg_cells + (apar * rs), 0.0)
 
-        # Decay Old Veg Cells
-        veg_cells = veg_cells * (1 / (1 + np.exp((rs - 0.5) * -10)))
-        # Add new NPP to Veg Cells through yield conversion from T/ha to Kg/m
-        veg_cells += 0.0011318 * npp * area
-        return veg_cells, moist_cells
+        #veg_cells += 0.0011318 * npp * area
+        return veg_cells
 
 #######################################################################################################################
 
@@ -198,6 +231,15 @@ cdef class CAgentResourceConsumptionSystemFunctions:
 #######################################################################################################################
 
 cdef class CAgentResourceAcquisitionFunctions:
+
+    @staticmethod
+    def num_to_farm(float threshold, int maxFarm, object random):
+        cdef int numToFarm, index
+        numToFarm = 0
+        for index in range(maxFarm):
+            if random.random() < threshold:
+                numToFarm += 1
+        return numToFarm
 
     @staticmethod
     def num_to_farm_phouse(float threshold, int maxFarm, object random, float farm_utility, float forage_utility):
