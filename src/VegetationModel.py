@@ -226,23 +226,28 @@ class SoilMoistureSystem(System, IDecodable):
 
     MOISTURE_KEY = 'moisture'
     EET_KEY = 'eet'
+    RAINFALL_MASK_KEY = 'mask'
 
     def __init__(self, id: str, model: Model, L: int, N: int, I: float, priority=0, frequency=1, start=0, end=maxsize):
         super().__init__(id, model, priority, frequency, start, end)
 
         model.environment.addComponent(SoilMoistureComponent(model.environment, model, L, N, I))
 
-        depth = self.model.environment[GlobalEnvironmentComponent].soil_depth
         def moisture_generator(pos, cells):
             cellID = discreteGridPosToID(pos[0], pos[1], model.environment.width)
-            return 0.0 #CSoilMoistureSystemFunctions.wfc(cells[NeoCOOP.NeoCOOP.SAND_KEY][cellID], cells[NeoCOOP.NeoCOOP.CLAY_KEY][cellID])
+            return 0.0
+
 
         def eet_generator(pos, cells):
             return 0.0
 
+        def rainfall_mask_generator(pos, cells):
+            return 1.0 - pos[1] / self.model.environment.height
+
         # Generate the initial moisture based on the soil sand content
         model.environment.addCellComponent(SoilMoistureSystem.MOISTURE_KEY, moisture_generator)
         model.environment.addCellComponent(SoilMoistureSystem.EET_KEY, eet_generator)
+        model.environment.addCellComponent(SoilMoistureSystem.RAINFALL_MASK_KEY, rainfall_mask_generator)
         self.lastAvgMoisture = 0.0
 
 
@@ -265,7 +270,8 @@ class SoilMoistureSystem(System, IDecodable):
             output = CSoilMoistureSystemFunctions.SMProcess_with_Flood(self.model.environment.cells[SoilMoistureSystem.MOISTURE_KEY].to_numpy(),
                     self.model.environment.cells[NeoCOOP.NeoCOOP.SAND_KEY].to_numpy(), self.model.environment.cells[NeoCOOP.NeoCOOP.CLAY_KEY].to_numpy(),
                     self.model.environment.cells[NeoCOOP.NeoCOOP.HEIGHT_KEY].to_numpy(), self.model.environment.cells[NeoCOOP.NeoCOOP.FLOOD_KEY].to_numpy(),
-                        self.model.environment[SoilMoistureComponent], self.model.environment[GlobalEnvironmentComponent])
+                    self.model.environment.cells[SoilMoistureSystem.RAINFALL_MASK_KEY].to_numpy(),
+                    self.model.environment[SoilMoistureComponent], self.model.environment[GlobalEnvironmentComponent])
 
         self.model.environment.cells.update({SoilMoistureSystem.MOISTURE_KEY: output[0],
                                              SoilMoistureSystem.EET_KEY: output[1]})
@@ -283,12 +289,9 @@ class VegetationGrowthSystem(System, IDecodable):
         model.environment.addComponent(VegetationGrowthComponent(self.model.environment, model, init_pop,
                                                                  carry_pop, growth_rate, decay_rate, ideal_moisture))
 
-        # Create a random range of values for the initial vegetation population
-        max_carry = min(carry_pop, int(init_pop + (init_pop * init_pop/carry_pop)))
-        min_carry = max(0, int(init_pop - (init_pop * init_pop/carry_pop)))
 
         def vegetation_generator(pos, cells):
-            return self.model.random.uniform(min_carry, max_carry)
+            return self.model.random.random()
         # Generate Initial vegetation layer
         model.environment.addCellComponent(VegetationGrowthSystem.VEGETATION_KEY, vegetation_generator)
 

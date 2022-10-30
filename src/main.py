@@ -89,18 +89,18 @@ def main():
     model = JsonDecoder().decode(parser.file + '/decoder.json')
 
     if parser.record:
-        #logging.info('\t-Adding Environment Data Collector.')
-        #os.mkdir(parser.base + '/environment')
-        #model.systemManager.addSystem(
-            #VegetationSnapshotCollector('VSC', model, parser.base + '/environment', parser.frequency))
+        logging.info('\t-Adding Environment Data Collector.')
+        os.mkdir(parser.base + '/environment')
+        model.systemManager.addSystem(
+            VegetationSnapshotCollector('VSC', model, parser.base + '/environment', parser.frequency))
         if len(model.environment.agents) > 0:
             logging.info('\t-Adding Agent Data Collector.')
             os.mkdir(parser.base + '/agents')
             model.systemManager.addSystem(AgentSnapshotCollector('ASC', model, parser.base + '/agents', parser.frequency))
-            #logging.info('\t-Adding Settlement Data Collector.')
-            #os.mkdir(parser.base + '/settlements')
-            #model.systemManager.addSystem(
-                #SettlementSnapshotCollector('SSC', model, parser.base + '/settlements', parser.frequency))
+            logging.info('\t-Adding Settlement Data Collector.')
+            os.mkdir(parser.base + '/settlements')
+            model.systemManager.addSystem(
+                SettlementSnapshotCollector('SSC', model, parser.base + '/settlements', parser.frequency))
 
     logging.info('...Done!')
 

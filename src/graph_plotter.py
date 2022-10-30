@@ -19,10 +19,11 @@ array_size = 2000
 iteration_multiplier = 5
 runs_count = 50
 
-plots_ids = ['PF', '1F', '2F', '4F', '8F', '16F', '32F', '64F', '128F', 'NF']
+#plots_ids = ['PF', '1F', '2F', '4F', '8F', '16F', '32F', '64F', '128F', 'NF']
+#plots_ids = ['P', '1', '2', '4', '8', '16', '32', 'N']
 #plots_ids = ['8F', '16F', '24F', '32F', '40F', '48F', '56F', '64F']
 #plots_ids = ['PS', '1S', '2S', '4S', '8S', '16S', '32S', '64S', '128S', 'NS']
-#plots_ids = ['PA', '1A', '2A', '4A', '8A', '16A', '32A', '64A', '128A', 'NA']
+plots_ids = ['PA', '1A', '2A', '4A', '8A', '16A', '32A', '64A', '128A', 'NA']
 levels = [50.0,55.0,60.0,65.0,70.0,75.0,80.0,85.0,90.0,95.0,100.0]
 
 def get_scenario_data(runs: {}):
@@ -48,13 +49,13 @@ def get_scenario_data(runs: {}):
         for i in range(array_size):
 
             if i < len(runs[seed]['population']['number']):
-                placeholder[i][index] = runs[seed]['population']['number'][i]
-                placeholder_pop[i][index] = runs[seed]['population']['total'][i]
-                peer_placeholder[i][index] = runs[seed]['peer_transfer']['mean'][i]
-                sub_placeholder[i][index] = runs[seed]['sub_transfer']['mean'][i]
-                gini_pop[i][index] = np.nan_to_num(runs[seed]['inequality']['gini'][i])
-                settlements_pop[i][index] = runs[seed]['settlements']['count'][i]
-                attachments[i][index] = runs[seed]['attachment']['mean'][i]
+                placeholder[i][index] = runs[seed]['population']['number'][i] if 'population' in runs[seed] else 0.0
+                placeholder_pop[i][index] = runs[seed]['population']['total'][i] if 'population' in runs[seed] else 0.0
+                peer_placeholder[i][index] = runs[seed]['peer_transfer']['mean'][i] if 'peer_transfer' in runs[seed] else 0.0
+                sub_placeholder[i][index] = runs[seed]['sub_transfer']['mean'][i] if 'sub_transfer' in runs[seed] else 0.0
+                gini_pop[i][index] = np.nan_to_num(runs[seed]['inequality']['gini'][i]) if 'inequality' in runs[seed] else 0.0
+                settlements_pop[i][index] = runs[seed]['settlements']['count'][i] if 'settlements' in runs[seed] else 0.0
+                attachments[i][index] = runs[seed]['attachment']['mean'][i] if 'attachment' in runs[seed] else 0.0
 
                 peer_dst_placeholder[i][index] = np.nan_to_num(np.array(runs[seed]['peer_transfer']['dist'][i]))
                 sub_dst_placeholder[i][index] = np.nan_to_num(np.array(runs[seed]['sub_transfer']['dist'][i]))
@@ -254,8 +255,8 @@ def main():
     for a in data:
         data_types[a] = ['Peer', 'Sub']
 
-    write_plot(plots_ids, '%s/population/HIGH_households' % parser.output, data,
-               '', [0], 'Iteration (Year)', 'Population (Households)', legend='upper left')
+    write_plot(plots_ids, '%s/population/households' % parser.output, data,
+               'Household Population for all Stress Scenarios Investigated', [0], 'Iteration (Year)', 'Population (Households)', legend='upper left')
 
     write_plot(plots_ids, '%s/settlements/settlement_density' % parser.output, data,
                '', [23], 'Iteration (Year)', 'Households per Settlement', legend='upper right')
@@ -352,7 +353,7 @@ def main():
 
     max_labels = np.round(np.linspace(45.0, 55.0, 21), 2)
 
-    fig, ax = pyplot.subplots(dpi=200)
+    fig, ax = pyplot.subplots(dpi=600)
     ax.set_title('')
     ax.set_xlabel('Iterations')
     ax.set_ylabel('Stress Scenario')
@@ -361,8 +362,8 @@ def main():
     ax.set_yticklabels(y_labels)
 
     # Generate the pix map
-    plot = ax.contourf(peer_heatmaps, cmap='copper')#, interpolation='none')
-    ax.contour(peer_heatmaps, colors = 'k')
+    plot = ax.contourf(peer_heatmaps, cmap='bone',  vmin=48.0, vmax=100.0)#, interpolation='none')
+    ax.contour(peer_heatmaps, colors = 'k',  vmin=48.0, vmax=100.0)
     cbar = fig.colorbar(plot)
     cbar.set_label('Peer Transfer %', rotation=90)
     ax.set_aspect('auto')
@@ -371,7 +372,7 @@ def main():
 
     max_labels = np.round(np.linspace(40.0, 55.0, 31), 2)
 
-    fig, ax = pyplot.subplots(dpi=200)
+    fig, ax = pyplot.subplots(dpi=600)
     ax.set_title('')
     ax.set_xlabel('Iterations')
     ax.set_ylabel('Stress Scenario')
@@ -380,8 +381,8 @@ def main():
     ax.set_yticklabels(y_labels)
 
     # Generate the pix map
-    plot = ax.contourf(sub_heatmaps, cmap='bone')#, interpolation='none')
-    ax.contour(sub_heatmaps, colors = 'k')
+    plot = ax.contourf(sub_heatmaps, cmap='bone',  vmin=48.0, vmax=100.0)#, interpolation='none')
+    ax.contour(sub_heatmaps, colors = 'k', vmin=48.0, vmax=100.0)
     cbar = fig.colorbar(plot)
     cbar.set_label('Sub Transfer %', rotation=90)
     ax.set_aspect('auto')
@@ -441,7 +442,7 @@ def main():
 
     for a in data:
         write_plot([a], '%s/transfer_chance/%s_transfer_chance' % (parser.output, a), data,
-                   'Peer and Sub Transfer Properties\n for Scenario %s' % a,
+                   'Peer and Sub Transfer Properties\n for Scenario with %s stress waves.' % a,
                    [2, 4], 'Iteration', 'Probability (%)', data_types=data_types,
                    show_std=1)
         write_plot([a], '%s/transfer_difference/%s_transfer_difference' % (parser.output, a), data,

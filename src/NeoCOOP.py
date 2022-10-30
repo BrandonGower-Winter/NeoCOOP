@@ -23,12 +23,12 @@ class NeoCOOP(Model, IDecodable, ILoggable):
     CLAY_KEY = 'clay'
 
     # Img Aliases
-    HEIGHTMAP_ALIAS = 'height'
-    SLOPEMAP_ALIAS = 'slope'
-    IS_WATER_ALIAS = 'iswater'
-    FLOOD_ALIAS = 'flood'
-    SAND_ALIAS = 'sand'
-    CLAY_ALIAS = 'clay'
+    HEIGHTMAP_ALIAS = 'height.png'
+    SLOPEMAP_ALIAS = 'slope.png'
+    IS_WATER_ALIAS = 'iswater.png'
+    FLOOD_ALIAS = 'flood.png'
+    SAND_ALIAS = 'sand.png'
+    CLAY_ALIAS = 'clay.png'
 
     parser = None
     pool_count = 0
@@ -45,7 +45,6 @@ class NeoCOOP(Model, IDecodable, ILoggable):
         IDecodable.__init__(self)
         ILoggable.__init__(self, logger_name='model', level=logging.INFO)
 
-        logging.info('\t-Creating Gridworld')
         self.debug = debug
         self.environment = env.GridWorld(width, height, self)
         self.cell_size = cell_size
@@ -85,7 +84,7 @@ class NeoCOOP(Model, IDecodable, ILoggable):
             slope_map = numpy.asarray(Image.open(path_to_decoder_file + NeoCOOP.SLOPEMAP_ALIAS).convert('L')) / 255.0
 
             def slope_generator(pos, cells):
-                return 1.0 - slope_map[pos[0]][pos[1]]
+                return 1.0 if slope_map[pos[1]][pos[0]] < 1.0 else 0.0
 
             self.environment.addCellComponent(NeoCOOP.SLOPE_KEY, slope_generator)
 
@@ -96,10 +95,10 @@ class NeoCOOP(Model, IDecodable, ILoggable):
             clay_map = numpy.asarray(Image.open(path_to_decoder_file + NeoCOOP.CLAY_ALIAS).convert('L')) / 255.0 * 100
 
             def sand_generator(pos, cells):
-                return sand_map[pos[0]][pos[1]]
+                return sand_map[pos[1]][pos[0]]
 
             def clay_generator(pos, cells):
-                return clay_map[pos[0]][pos[1]]
+                return clay_map[pos[1]][pos[0]]
 
             self.environment.addCellComponent(NeoCOOP.SAND_KEY, sand_generator)
             self.environment.addCellComponent(NeoCOOP.CLAY_KEY, clay_generator)
@@ -107,10 +106,10 @@ class NeoCOOP(Model, IDecodable, ILoggable):
             # Load Soil Data
             logging.info('\t-Loading Water Cell Data')
 
-            water_map = numpy.asarray(Image.open(path_to_decoder_file + NeoCOOP.CLAY_ALIAS).convert('L')) > 0.005
+            water_map = numpy.asarray(Image.open(path_to_decoder_file + NeoCOOP.IS_WATER_ALIAS).convert('L')) > 0.005
 
             def water_generator(pos, cells):
-                return water_map[pos[0]][pos[1]]
+                return water_map[pos[1]][pos[0]]
 
             self.environment.addCellComponent(NeoCOOP.IS_WATER_KEY, water_generator)
 
@@ -120,7 +119,7 @@ class NeoCOOP(Model, IDecodable, ILoggable):
                 flood_map = self.min_height + (numpy.asarray(Image.open(path_to_decoder_file + NeoCOOP.FLOOD_ALIAS).convert('L')) / 255.0 * height_diff)
 
                 def flood_generator(pos, cells):
-                    return flood_map[pos[0]][pos[1]]
+                    return flood_map[pos[1]][pos[0]]
 
                 self.environment.addCellComponent(NeoCOOP.FLOOD_KEY, flood_generator)
 

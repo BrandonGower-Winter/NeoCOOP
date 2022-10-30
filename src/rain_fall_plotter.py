@@ -28,7 +28,7 @@ def main():
     #plt.plot(iterations, start_data)
     plt.plot(iterations, data, '0.6')
     #plt.plot(iterations, (end_data + start_data)/2.0, '0.0')
-    plt.ylabel('Available Resources')
+    plt.ylabel('Mixing Parameter (x)')
     plt.xlabel('Iterations')
 
     plt.savefig('rainfall_example.png', format='png')

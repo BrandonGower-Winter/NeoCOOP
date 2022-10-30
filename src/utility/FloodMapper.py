@@ -8,13 +8,14 @@ from ECAgent.Environments import discreteGridPosToID
 
 def main():
 
-    max_h = float(sys.argv[3])
-    heightmap = numpy.asarray(Image.open(sys.argv[1]).convert('L')) / 255.0 * max_h
+    min_h = float(sys.argv[3])
+    max_h = float(sys.argv[4])
+    heightmap = min_h + ((numpy.asarray(Image.open(sys.argv[1]).convert('L')) / 255.0) * (max_h - min_h))
     isWaterArr = numpy.asarray(Image.open(sys.argv[2]).convert('L')) > 0.005
 
     output = numpy.zeros(heightmap.shape)
 
-    flood_cell_divide = int(sys.argv[4])
+    flood_cell_divide = int(sys.argv[5])
     flood_divide_ratio = len(output[0]) // flood_cell_divide
     print(flood_divide_ratio)
     avg_water_heights = []
@@ -60,7 +61,7 @@ def main():
             output[y][x] = avg_water_heights[discreteGridPosToID(x // flood_cell_divide,
                                                            y // flood_cell_divide, flood_divide_ratio)]
 
-    im = Image.fromarray(output / max_h * 255.0).convert('RGB')
+    im = Image.fromarray((output - min_h) / (max_h-min_h) * 255.0).convert('RGB')
     im.save('output.png', optimize=True)
 
 if __name__ == '__main__':

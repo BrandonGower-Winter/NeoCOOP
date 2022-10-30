@@ -91,7 +91,7 @@ cdef class CSoilMoistureSystemFunctions:
 
 
     @staticmethod
-    def SMProcess_with_Flood(soil_vals, sand_content, clay_content, height_cells, flood_heights, sm_comp, global_env_comp) -> [float]:
+    def SMProcess_with_Flood(soil_vals, sand_content, clay_content, height_cells, flood_heights, rain_mask, sm_comp, global_env_comp) -> [float]:
         cdef int i
         cdef float PET
         cdef np.ndarray[double] EET
@@ -101,8 +101,10 @@ cdef class CSoilMoistureSystemFunctions:
         cdef np.ndarray[double] sand_sqrd = sand_content ** 2
         cdef np.ndarray[double] alpha = (2.71828 ** (-4.396 - 0.0715 * clay_content - 0.000488 * sand_sqrd - 0.00004258 * sand_sqrd * clay_content)) * 100
         cdef np.ndarray[double] beta = -3.140 - 0.000000222 * (clay_content ** 2) - 0.00003484 * sand_sqrd * clay_content
+        cdef np.ndarray[double] rain_cells = rain_mask * global_env_comp.rainfall
 
-        cdef np.ndarray[double] max_vals = (0.332 - 0.0007251 * sand_content * 0.1276 * np.log10(clay_content))
+        clay_content[clay_content < 0.00000001] = 0.00000001 # Prevent division by zero warnings
+        cdef np.ndarray[double] max_vals = 0.332 - 0.0007251 * sand_content * 0.1276 * np.where(clay_content != 0.0, np.log10(clay_content), 0.0)
 
         # Calculate Potential Evaporation
         PET = CSoilMoistureSystemFunctions.thornthwaite(sm_comp.L, sm_comp.N, global_env_comp.temp,
@@ -113,19 +115,10 @@ cdef class CSoilMoistureSystemFunctions:
         soil_vals = np.where(is_flooded, max_vals, soil_vals)
 
         # Calculate new soil values
-        if PET > global_env_comp.rainfall: # When Rainfall is lower than PET
-            RDR = ((1 + alpha) / (1 + alpha * (soil_vals ** np.maximum(beta, 0.0))))
+        RDR = ((1 + alpha) / (1 + alpha * (soil_vals ** np.maximum(beta, 0.0))))
+        soil_vals = np.where(PET > rain_cells, np.maximum(soil_vals - (PET - rain_cells) * RDR, 0), np.minimum(soil_vals + (rain_cells - PET), max_vals))
 
-            EET = np.minimum(global_env_comp.rainfall +  (PET - global_env_comp.rainfall) * RDR,
-                             global_env_comp.rainfall + soil_vals - 0.17)
-
-            soil_vals = np.maximum(soil_vals - (PET - global_env_comp.rainfall) * RDR, 0)
-
-        else: # When Rainfall is higher than PET
-            soil_vals = soil_vals + (global_env_comp.rainfall - PET)
-            soil_vals = np.minimum(soil_vals, max_vals)
-            EET = np.full(len(soil_vals), PET)
-
+        EET = np.where(PET > rain_cells, np.minimum(rain_cells +  (PET - rain_cells) * RDR, rain_cells + soil_vals - 0.17), np.full(len(soil_vals), PET))
         EET = np.where(is_flooded, PET, EET)
 
 
@@ -166,22 +159,14 @@ cdef class CVegetationGrowthSystemFunctions:
         cdef np.ndarray[double] rs = np.zeros(len(veg_cells))
 
         # Calculate water penalties
-        np.clip(0.5 + eet_cells , -1.0, 1.0, out=rs)
+        np.clip(0.5 + 0.5 * eet_cells , 0.0, 1.0, out=rs)
 
         # Calculate the temperature penalty
         rs *=  CVegetationGrowthSystemFunctions.tOpt(ge_comp.temp)
 
         # Apply slope penalty
-        rs *= slope_cells * 0.482
+        veg_cells = rs * slope_cells
 
-
-        cdef np.ndarray[double] ndvi = 0.0163 * (veg_cells ** 0.4831)
-        cdef np.ndarray[double] SR = (1 + ndvi) / (1 - ndvi)
-        cdef np.ndarray[double] fpar = np.minimum( SR / 4.05 - 0.27, 0.95)
-        cdef np.ndarray[double] apar = ge_comp.solar * 0.5 * fpar
-        veg_cells = np.maximum(veg_cells + (apar * rs), 0.0)
-
-        #veg_cells += 0.0011318 * npp * area
         return veg_cells
 
 #######################################################################################################################
@@ -299,41 +284,24 @@ cdef class CAgentResourceAcquisitionFunctions:
         return toReturn
 
     @staticmethod
-    def forage(int patch_id, int workers, np.ndarray vegetation_cells, int consumption_rate, float forage_multiplier,
-               int per_patch) -> float:
-        cdef float veg_diff, farmed_res
+    def forage(int patch_id, int workers, int consumption_rate, float forage_multiplier, int farms_per_patch, np.ndarray veg_cells) -> float:
+        return veg_cells[patch_id] * consumption_rate * forage_multiplier * (workers / farms_per_patch)
 
-        veg_diff = max(vegetation_cells[patch_id]
-                       - consumption_rate * (workers / per_patch), 0.0)
-
-        farmed_res = vegetation_cells[patch_id] - veg_diff
-        vegetation_cells[patch_id] = veg_diff
-        return farmed_res * forage_multiplier
 
     @staticmethod
-    def farm(int patch_id, int workers, (int, int) house_pos, (int, int) coords, float temperature, int max_acquisition_distance,
-             int moisture_consumption_rate, int crop_gestation_period, int farming_production_rate, int farms_per_patch,
-             np.ndarray height_cells, np.ndarray moisture_cells, np.ndarray slope_cells,
-             object sm_comp, object ge_comp, object random) -> float:
-        # Calculate penalties
+    def farm(int patch_id, int workers, (int, int) house_pos, (int, int) coords, int max_acquisition_distance,
+             int farming_production_rate, int farms_per_patch, np.ndarray veg_cells) -> float:
 
+        # Calculate penalties
         cdef int dst
-        cdef float dst_penalty, tmp_penalty, wtr_penalty, moisture_remain, crop_yield
+        cdef float dst_penalty, crop_yield
 
         dst = max(absolute(coords[0] - house_pos[0]), absolute(coords[1] - house_pos[1]))
         dst_penalty = 1.0 if dst <= max_acquisition_distance else 1.0 / (dst - max_acquisition_distance)
 
-        tmp_penalty = CVegetationGrowthSystemFunctions.tempPenalty(temperature, random)
+        crop_yield = farming_production_rate * veg_cells[patch_id] * (workers / farms_per_patch)
 
-        wtr_penalty, moisture_remain = CVegetationGrowthSystemFunctions.waterPenalty(moisture_cells[patch_id],
-                                                                                     moisture_consumption_rate / crop_gestation_period)
-        # Calculate Crop Yield
-
-        moisture_cells[patch_id] = moisture_remain
-
-        crop_yield = farming_production_rate * wtr_penalty * tmp_penalty * slope_cells[patch_id] * (workers / farms_per_patch)
-
-        return int(crop_yield * dst_penalty)
+        return crop_yield * dst_penalty
 
 
 #######################################################################################################################

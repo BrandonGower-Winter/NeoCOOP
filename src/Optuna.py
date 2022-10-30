@@ -31,9 +31,9 @@ def objective(trial):
 
     # Parameters to optimize
     # Influence Frequency
-    AgentIEAdaptationSystem.frequency = trial.suggest_int('influence_frequency', 5, 20)
+    AgentIEAdaptationSystem.frequency = trial.suggest_int('influence_frequency', 5, 50)
     # Influence Rate
-    AgentIEAdaptationSystem.influence_rate = trial.suggest_uniform('influence_rate', 0.01, 0.25)
+    AgentIEAdaptationSystem.influence_rate = trial.suggest_uniform('influence_rate', 0.01, 1.0)
     # Mutation Rate
     IEComponent.mutation_rate = trial.suggest_uniform('mutation_rate', 0.01, 0.25)
     # Learning and Conformity rate range

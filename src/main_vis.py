@@ -1,7 +1,7 @@
 # Note! This script will only work if the agents have the same attributes
 import math
 
-import Animate
+import visualization.Animate as Animate
 import json
 import numpy as np
 import os
@@ -319,8 +319,8 @@ def xtent_map(settlement_data : [], pixels):
                     n_y = pos_data[it_set[i]['pos'][0]][1]
                     ds[i] = math.sqrt(((x - n_x) ** 2) + ((y - n_y) ** 2))
 
-                ds = ds * 2000  # Cell Size
-                dst = CAgentUtilityFunctions.xtent_distribution(ws, ds, 0.75, 1.5)
+                ds = ds * 1000  # Cell Size
+                dst = CAgentUtilityFunctions.xtent_distribution(ws, ds, 0.8, 0.05)
 
                 iSettlement = np.argmax(dst)
 
@@ -472,28 +472,6 @@ def generate_settlement_plots(parser, pixels):
 
     settlement_snapshots = load_json_files(parser.path + '/settlements')
 
-    settlement_dict = get_composite_property_as_dict(settlement_snapshots, ['wealth'],
-                                                     [('mean', statistics.mean),
-                                                      ('median', statistics.median),
-                                                      ('min', min),
-                                                      ('max', max),
-                                                      ('total', sum),
-                                                      ('gini', gini)], sort=True)
-
-    generate_plot_from_dict('Summary of Settlement Resources over 1000 years', settlement_dict,
-                            parser.path + '/settlement_plots/resource_summary.png',
-                            filter=['mean', 'median', 'min', 'max'],
-                            y_label='Resources (KG)', legend='center left')
-
-    generate_plot_from_dict('Total Settlement Resources over 1000 years', settlement_dict,
-                            parser.path + '/settlement_plots/resource_total.png',
-                            filter=['total'],
-                            y_label='Resources (KG)', legend='center right')
-
-    generate_plot_from_dict('Gini Coeffecient for Settlements over 1000 years', settlement_dict,
-                            parser.path + '/settlement_plots/resources_gini.png',
-                            filter=['gini'], legend='center right')
-
     xtent_arr = xtent_map(settlement_snapshots, pixels)
 
     farm_utility_arr = xtent_to_property(xtent_arr, settlement_snapshots, 'farm_utility')
@@ -512,23 +490,23 @@ def generate_settlement_plots(parser, pixels):
     peer_arr = xtent_to_property(xtent_arr, settlement_snapshots, 'peer_transfer', 1)
     sub_arr = xtent_to_property(xtent_arr, settlement_snapshots, 'sub_transfer', 1)
 
-    Animate.generateAnimat('Xtent model showing Settlement Territory', xtent_arr, fps=100, vmin=0, vmax=300,
-                           filename=parser.path + '/settlement_plots/xtent_animat')
+    #Animate.generateAnimat('Xtent model showing Settlement Territory', xtent_arr, fps=100, vmin=0, vmax=300,
+                           #filename=parser.path + '/settlement_plots/xtent_animat', cmap='viridis')
 
     Animate.generateAnimat('Influence of Settlement Farm/Forage Preference', farm_utility_arr, fps=100, vmin=0, vmax=2,
-                           filename=parser.path + '/settlement_plots/farm_utility_influence_animat')
+                           filename=parser.path + '/settlement_plots/farm_utility_influence_animat', cmap='viridis')
 
-    Animate.generateAnimat('Influence of Settlement Learning Rate', learning_rate_arr, fps=100, vmin=0, vmax=1.2,
-                           filename=parser.path + '/settlement_plots/learning_rate_influence_animat')
+    Animate.generateAnimat('Influence of Settlement Learning Rate', learning_rate_arr, fps=100, vmin=0, vmax=1.7,
+                           filename=parser.path + '/settlement_plots/learning_rate_influence_animat', cmap='viridis')
 
-    Animate.generateAnimat('Influence of Settlement Conformity', conformity_arr, fps=100, vmin=0, vmax=1.2,
-                           filename=parser.path + '/settlement_plots/conformity_influence_animat')
+    Animate.generateAnimat('Influence of Settlement Conformity', conformity_arr, fps=100, vmin=0, vmax=1.7,
+                           filename=parser.path + '/settlement_plots/conformity_influence_animat', cmap='viridis')
 
     Animate.generateAnimat('Influence of Settlement Peer Exchange', peer_arr, fps=100, vmin=0, vmax=2,
-                           filename=parser.path + '/settlement_plots/peer_influence_animat')
+                           filename=parser.path + '/settlement_plots/peer_influence_animat', cmap='viridis')
 
     Animate.generateAnimat('Influence of Settlement Sub Exchange', sub_arr, fps=100, vmin=0, vmax=2,
-                           filename=parser.path + '/settlement_plots/sub_influence_animat')
+                           filename=parser.path + '/settlement_plots/sub_influence_animat', cmap='viridis')
 
 
 def generate_environment_plots(parser, pixels):
@@ -541,12 +519,10 @@ def generate_environment_plots(parser, pixels):
     create_composite_property_as_panda(environment_snapshots, land_possesion, {'pixels': pixels})
     pandas_to_animat('NeoCOOP Visual Representation', parser.width, parser.height, environment_snapshots, 'land_ownership',
                      parser.path + '/environment_plots/land_ownership_animat', 100, vmin=0, vmax=2)
-    pandas_to_animat('Animation of `Vegetation` over 1000 years', parser.width, parser.height, environment_snapshots,
-                     'vegetation',
-                     parser.path + '/environment_plots/vegetation_animat', 10, vmin=0, vmax=21500)
-    #pandas_to_animat('Animation of `Soil Moisture` over 1000 years', parser.width, parser.height, environment_snapshots,
-                     #'moisture',
-                     #parser.path + '/environment_plots/moisture_animat', 10, vmin=0, vmax=700)
+
+    #pandas_to_animat('Animation of `Vegetation` over 1000 years', parser.width, parser.height, environment_snapshots,
+                     #'vegetation',
+                     #parser.path + '/environment_plots/vegetation_animat', 10, vmin=0.0, vmax=1.0)
 
 
 def generate_log_plots(parser):
@@ -640,8 +616,8 @@ if __name__ == '__main__':
 
     #generate_settlement_plots(parser, pixels)
     #generate_log_plots(parser)
-    #generate_environment_plots(parser, pixels)
-    generate_household_plots(parser)
+    generate_environment_plots(parser, pixels)
+    #generate_household_plots(parser)
 
     #other_stuff()
     #dynamic_farm_animat(parser, pixels)
