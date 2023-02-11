@@ -2,7 +2,11 @@
 NeoCOOP is an agent-based model (ABM) designed to simulate the emergence and evolution of altruistic and selfish 
 behaviour in Neolithic Households under varying degrees of environmental stress.
 
-An ODD+D [[Müller et al., 2013]](https://www.sciencedirect.com/science/article/pii/S1364815213001394) description plus additional model details have been included in [Supplementary Materials.pdf](./Supplementary%20Materials.pdf)
+An ODD+D [[Müller et al., 2013]](https://www.sciencedirect.com/science/article/pii/S1364815213001394) 
+description plus additional model details have been included 
+in [Supplementary Materials.pdf](./Supplementary%20Materials.pdf). Specific versions of
+NeoCOOP can be found under releases and all old supplementary materials (which may be more
+relevant to you) can be found under [resources](./resources/OLD%20Supplementary%20Materials).
 
 ![Visualization of NeoCOOP. Black pixels are settlements and gray pixels are farmland](./resources/land_ownership.jpeg)
 
@@ -28,7 +32,7 @@ This will create several *.so* files that NeoCOOP will make use of.
 
 ## Running a Single Simulation:
 
-To run an instance of NeoCOOP, first make sure you have installed all of the neccessary modules and have the virtual environment activated.
+To run an instance of NeoCOOP, first make sure you have installed all the necessary modules and have the virtual environment activated.
 
 Run a single instance of NeoCOOP by typing the following into your terminal:
 
@@ -73,13 +77,13 @@ This will create a series of JSON files will all of a batch simulations useful i
 If the size of the generated simulation data cannot be processed by your machine, you can process and stitch the data
 using:
 
-```python
+```bash
 > python3 src/scenario_data_processor.py -p path -o output_folder
 ```
 
 and
 
-```python
+```bash
 > python3 src/scenario_stitcher.py -p path -o output_file -s file_suffix
 ```
 
@@ -130,4 +134,16 @@ Available here: http://www.nitschke-lab.uct.ac.za/sites/default/files/image_tool
 Brandon Gower-Winter and Geoff Nitschke. Societies prefer the middle-ground between selfishness and 
 cooperation. In 4th International Workshop on Agent-Based Modelling of Human Behaviour (ABMHuB’22), 
 2022.  Available here: http://abmhub.cs.ucl.ac.uk/2022/camera_ready/Gower-Winter_Nitschke.pdf
+```
+
+```
+Brandon Gower-Winter and Geoff Nitschke. Extreme Environments Perpetuate Cooperation. In IEEE Symposium Series On 
+Computational Intelligence (SSCI’22) Available here: https://pubs.cs.uct.ac.za/id/eprint/1540/1/
+2022-Extreme%20Environments%20Perpetuate%20Cooperation.pdf
+```
+
+```
+Brandon Gower-Winter. Self-Adapting Simulated Artificial Societies. Masters Dissertation. University of Cape Town (2022)
+Available here: http://www.nitschke-lab.uct.ac.za/sites/default/files/image_tool/images/540/Papers/
+2022-Self-Adapting%20Simulated%20Artificial%20Societies.pdf
 ```

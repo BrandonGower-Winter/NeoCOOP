@@ -517,12 +517,12 @@ def generate_environment_plots(parser, pixels):
     environment_snapshots = load_csvs(parser.path + '/environment')
 
     create_composite_property_as_panda(environment_snapshots, land_possesion, {'pixels': pixels})
-    pandas_to_animat('NeoCOOP Visual Representation', parser.width, parser.height, environment_snapshots, 'land_ownership',
-                     parser.path + '/environment_plots/land_ownership_animat', 100, vmin=0, vmax=2)
+    #pandas_to_animat('NeoCOOP Visual Representation', parser.width, parser.height, environment_snapshots, 'land_ownership',
+                     #parser.path + '/environment_plots/land_ownership_animat', 100, vmin=0, vmax=2)
 
-    #pandas_to_animat('Animation of `Vegetation` over 1000 years', parser.width, parser.height, environment_snapshots,
-                     #'vegetation',
-                     #parser.path + '/environment_plots/vegetation_animat', 10, vmin=0.0, vmax=1.0)
+    pandas_to_animat('Animation of `Vegetation` over 1000 years', parser.width, parser.height, environment_snapshots,
+                     'vegetation',
+                     parser.path + '/environment_plots/vegetation_animat', 10, vmin=0.0, vmax=1.0)
 
 
 def generate_log_plots(parser):
@@ -616,8 +616,8 @@ if __name__ == '__main__':
 
     #generate_settlement_plots(parser, pixels)
     #generate_log_plots(parser)
-    generate_environment_plots(parser, pixels)
-    #generate_household_plots(parser)
+    #generate_environment_plots(parser, pixels)
+    generate_household_plots(parser)
 
     #other_stuff()
     #dynamic_farm_animat(parser, pixels)

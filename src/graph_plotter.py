@@ -23,7 +23,10 @@ runs_count = 50
 #plots_ids = ['P', '1', '2', '4', '8', '16', '32', 'N']
 #plots_ids = ['8F', '16F', '24F', '32F', '40F', '48F', '56F', '64F']
 #plots_ids = ['PS', '1S', '2S', '4S', '8S', '16S', '32S', '64S', '128S', 'NS']
-plots_ids = ['PA', '1A', '2A', '4A', '8A', '16A', '32A', '64A', '128A', 'NA']
+#plots_ids = ['PA', '1A', '2A', '4A', '8A', '16A', '32A', '64A', '128A', 'NA']
+plots_ids = ['P', '1', '2', '4','8', '16', '32', '64', '128', 'N']
+
+#plots_ids = []
 levels = [50.0,55.0,60.0,65.0,70.0,75.0,80.0,85.0,90.0,95.0,100.0]
 
 def get_scenario_data(runs: {}):
@@ -77,7 +80,7 @@ def get_scenario_data(runs: {}):
         if runs_processed > runs_count:
             break
 
-    line_data = np.zeros((27, array_size), dtype=float)
+    line_data = np.zeros((28, array_size), dtype=float)
     bar_data = np.zeros((2, 3, 10), dtype=float)
     stats_data = np.zeros((3,runs_count), dtype=float)
     population_data = placeholder
@@ -135,6 +138,8 @@ def get_scenario_data(runs: {}):
 
         line_data[25][i] = np.mean(attachments[i])
         line_data[26][i] = np.std(attachments[i])
+
+        line_data[27][i] = line_data[2][i] - line_data[4][i]
 
         if i == 0:
             bar_data[0][0] = np.mean(peer_dst_placeholder[i], axis=0)
@@ -255,190 +260,196 @@ def main():
     for a in data:
         data_types[a] = ['Peer', 'Sub']
 
-    write_plot(plots_ids, '%s/population/households' % parser.output, data,
-               'Household Population for all Stress Scenarios Investigated', [0], 'Iteration (Year)', 'Population (Households)', legend='upper left')
+    if len(plots_ids) != 0:
+        write_plot(plots_ids, '%s/population/households' % parser.output, data,
+                   'Household Population for all Stress Scenarios Investigated', [0], 'Iteration (Year)', 'Population (Households)', legend='upper left')
 
-    write_plot(plots_ids, '%s/settlements/settlement_density' % parser.output, data,
-               '', [23], 'Iteration (Year)', 'Households per Settlement', legend='upper right')
+        write_plot(plots_ids, '%s/difference.pdf' % parser.output, data,
+                   '', [27], 'Iteration', 'Peer - Subordinate Transfer (%)', legend='upper left')
 
-    write_plot(plots_ids, '%s/gini/inequality' % parser.output, data,
-               '', [24], 'Iteration (Year)', 'Gini Index', legend='upper left')
+        write_plot(plots_ids, '%s/settlements/settlement_density' % parser.output, data,
+                   '', [23], 'Iteration', 'Households per Settlement', legend='upper right')
 
-    peer_heatmaps = np.zeros((len(plots_ids), 6))
-    sub_heatmaps = np.zeros((len(plots_ids), 6))
+        write_plot(plots_ids, '%s/gini/inequality' % parser.output, data,
+                   '', [24], 'Iteration', 'Gini Index', legend='upper left')
 
-    for i, id in enumerate(plots_ids):
-        peer_heatmaps[i] = bar_data[id][0][2][2:8]
-        sub_heatmaps[i] = bar_data[id][1][2][2:8]
+        peer_heatmaps = np.zeros((len(plots_ids), 6))
+        sub_heatmaps = np.zeros((len(plots_ids), 6))
 
-    from scipy.ndimage.filters import gaussian_filter
+        for i, id in enumerate(plots_ids):
+            peer_heatmaps[i] = bar_data[id][0][2][2:8]
+            sub_heatmaps[i] = bar_data[id][1][2][2:8]
 
-    x_labels = plots_ids
-    y_labels = ['21-30', '31-40', '41-50', '51-60', '61-70', '71-80']
+        from scipy.ndimage.filters import gaussian_filter
 
-    max_labels = np.round(np.linspace(0.0, 0.75, 16), 2)
+        x_labels = plots_ids
+        y_labels = ['21-30', '31-40', '41-50', '51-60', '61-70', '71-80']
 
-    fig, ax = pyplot.subplots(dpi=200)
-    ax.set_title('')
-    ax.set_xlabel('Stress Scenario')
-    ax.set_ylabel('Peer Transfer Property (%)')
+        max_labels = np.round(np.linspace(0.0, 0.75, 16), 2)
 
-    ax.set_xticklabels(x_labels)
-    ax.set_yticklabels(y_labels)
+        fig, ax = pyplot.subplots(dpi=200)
+        ax.set_title('')
+        ax.set_xlabel('Stress Scenario')
+        ax.set_ylabel('Peer Transfer Property (%)')
 
-    # Generate the pix map
-    plot = ax.contourf(np.transpose(peer_heatmaps), max_labels, cmap='hot')
-    fig.colorbar(plot)
-    ax.set_aspect('auto')
+        ax.set_xticklabels(x_labels)
+        ax.set_yticklabels(y_labels)
 
-    fig.savefig('%s/peer_heatmap' % parser.output)
-    pyplot.close(fig)
+        # Generate the pix map
+        plot = ax.contourf(np.transpose(peer_heatmaps), max_labels, cmap='hot')
+        fig.colorbar(plot)
+        ax.set_aspect('auto')
 
-    fig, ax = pyplot.subplots(dpi=200)
-    ax.set_title('')
-    ax.set_xlabel('Stress Scenario')
-    ax.set_ylabel('Subordinate Transfer Property (%)')
+        fig.savefig('%s/peer_heatmap' % parser.output)
+        pyplot.close(fig)
 
-    ax.set_xticklabels(x_labels)
-    ax.set_yticklabels(y_labels)
+        fig, ax = pyplot.subplots(dpi=200)
+        ax.set_title('')
+        ax.set_xlabel('Stress Scenario')
+        ax.set_ylabel('Subordinate Transfer Property (%)')
 
-    # Generate the pix map
-    plot = ax.contourf(np.transpose(sub_heatmaps), max_labels, cmap='bone')
-    fig.colorbar(plot)
-    ax.set_aspect('auto')
+        ax.set_xticklabels(x_labels)
+        ax.set_yticklabels(y_labels)
 
-    fig.savefig('%s/sub_heatmap' % parser.output)
-    pyplot.close(fig)
+        # Generate the pix map
+        plot = ax.contourf(np.transpose(sub_heatmaps), max_labels, cmap='bone')
+        fig.colorbar(plot)
+        ax.set_aspect('auto')
 
-
-    gini_heatmaps = np.zeros((len(plots_ids), 2000))
-    y_labels = ['0', '', '2000', '', '4000', '', '6000', '', '8000', '', '10000']
-
-    for i, id in enumerate(plots_ids):
-        gini_heatmaps[i] = data[id][24]
+        fig.savefig('%s/sub_heatmap' % parser.output)
+        pyplot.close(fig)
 
 
-    fig, ax = pyplot.subplots(dpi=200)
-    ax.set_title('')
-    ax.set_xlabel('Iterations (Year)')
-    ax.set_ylabel('Gini Index')
+        gini_heatmaps = np.zeros((len(plots_ids), 2000))
+        y_labels = ['0', '', '2000', '', '4000', '', '6000', '', '8000', '', '10000']
 
-    ax.set_xticklabels(y_labels)
-    ax.set_yticklabels([''] + x_labels)
-
-    plot = ax.imshow(gini_heatmaps, cmap='gray', interpolation='none')
-    fig.colorbar(plot)
-    ax.set_aspect('auto')
-
-    fig.savefig('%s/gini_heatmap' % parser.output)
-    pyplot.close(fig)
-
-    y_labels = plots_ids
-    if 'PF' in y_labels:
-        y_labels.remove('PF')
-    if 'PS' in y_labels:
-        y_labels.remove('PS')
-    if 'PA' in y_labels:
-        y_labels.remove('PA')
-    x_labels = ['0', '', '2000', '', '4000', '', '6000', '', '8000', '', '10000']
-
-    peer_heatmaps = np.zeros((len(y_labels), 2000))
-    sub_heatmaps = np.zeros((len(y_labels), 2000))
-
-    for i, id in enumerate(y_labels):
-        peer_heatmaps[i] = data[id][2]
-        sub_heatmaps[i] = data[id][4]
-
-    #y_labels = [''] + y_labels
-
-    max_labels = np.round(np.linspace(45.0, 55.0, 21), 2)
-
-    fig, ax = pyplot.subplots(dpi=600)
-    ax.set_title('')
-    ax.set_xlabel('Iterations')
-    ax.set_ylabel('Stress Scenario')
-
-    ax.set_xticklabels(x_labels)
-    ax.set_yticklabels(y_labels)
-
-    # Generate the pix map
-    plot = ax.contourf(peer_heatmaps, cmap='bone',  vmin=48.0, vmax=100.0)#, interpolation='none')
-    ax.contour(peer_heatmaps, colors = 'k',  vmin=48.0, vmax=100.0)
-    cbar = fig.colorbar(plot)
-    cbar.set_label('Peer Transfer %', rotation=90)
-    ax.set_aspect('auto')
-    fig.savefig('%s/peer_transfer_heatmap' % parser.output)
-    pyplot.close(fig)
-
-    max_labels = np.round(np.linspace(40.0, 55.0, 31), 2)
-
-    fig, ax = pyplot.subplots(dpi=600)
-    ax.set_title('')
-    ax.set_xlabel('Iterations')
-    ax.set_ylabel('Stress Scenario')
-
-    ax.set_xticklabels(x_labels)
-    ax.set_yticklabels(y_labels)
-
-    # Generate the pix map
-    plot = ax.contourf(sub_heatmaps, cmap='bone',  vmin=48.0, vmax=100.0)#, interpolation='none')
-    ax.contour(sub_heatmaps, colors = 'k', vmin=48.0, vmax=100.0)
-    cbar = fig.colorbar(plot)
-    cbar.set_label('Sub Transfer %', rotation=90)
-    ax.set_aspect('auto')
-    fig.savefig('%s/sub_transfer_heatmap' % parser.output)
-    pyplot.close(fig)
+        for i, id in enumerate(plots_ids):
+            gini_heatmaps[i] = data[id][24]
 
 
-    attachment_heatmaps = np.zeros((len(y_labels), 2000))
-    for i, id in enumerate(y_labels):
-        attachment_heatmaps[i] = data[id][25]
+        fig, ax = pyplot.subplots(dpi=200)
+        ax.set_title('')
+        ax.set_xlabel('Iterations (Year)')
+        ax.set_ylabel('Gini Index')
 
-    fig, ax = pyplot.subplots(dpi=200)
-    ax.set_title('')
-    ax.set_xlabel('Iterations')
-    ax.set_ylabel('Stress Scenario')
+        ax.set_xticklabels(y_labels)
+        ax.set_yticklabels([''] + x_labels)
 
-    ax.set_xticklabels(x_labels)
-    ax.set_yticklabels(y_labels)
+        plot = ax.imshow(gini_heatmaps, cmap='gray', interpolation='none')
+        fig.colorbar(plot)
+        ax.set_aspect('auto')
 
-    # Generate the pix map
-    plot = ax.contourf(attachment_heatmaps, cmap='pink')#, interpolation='none')
-    ax.contour(attachment_heatmaps, colors = 'k')
-    cbar = fig.colorbar(plot)
-    cbar.set_label('Attachment', rotation=90)
-    ax.set_aspect('auto')
-    fig.savefig('%s/attachment_heatmap' % parser.output)
-    pyplot.close(fig)
+        fig.savefig('%s/gini_heatmap' % parser.output)
+        pyplot.close(fig)
 
-    ax.set_title('')
-    ax.set_xlabel('Iterations')
-    ax.set_ylabel('Stress Scenario')
+        y_labels = plots_ids
+        if 'PF' in y_labels:
+            y_labels.remove('PF')
+        if 'PS' in y_labels:
+            y_labels.remove('PS')
+        if 'PA' in y_labels:
+            y_labels.remove('PA')
+        x_labels = ['0', '', '2000', '', '4000', '', '6000', '', '8000', '', '10000']
 
-    ax.set_xticklabels(x_labels)
-    ax.set_yticklabels(y_labels)
-    pyplot.close(fig)
+        peer_heatmaps = np.zeros((len(y_labels), 2000))
+        sub_heatmaps = np.zeros((len(y_labels), 2000))
 
-    fig, ax = pyplot.subplots(dpi=200)
-    # Generate the pix map
-    toPlot = peer_heatmaps - sub_heatmaps
-    plot = ax.contourf(toPlot, cmap='summer', linewidths = 1.0)#, interpolation='none')
-    ax.contour(toPlot, colors = 'k')
-    cbar = fig.colorbar(plot)
-    cbar.set_label('Difference (%)', rotation=90)
-    ax.set_aspect('auto')
-    fig.savefig('%s/difference_heatmap' % parser.output)
-    pyplot.close(fig)
+        for i, id in enumerate(y_labels):
+            peer_heatmaps[i] = data[id][2]
+            sub_heatmaps[i] = data[id][4]
 
-    toPlot = [data[a][2][1999] - data[a][4][1999] for a in y_labels]
+        #y_labels = [''] + y_labels
 
-    fig, ax = pyplot.subplots(dpi=200)
-    ax.set_xlabel('Stress Scenarios')
-    ax.set_ylabel('Difference (%) (Peer - Sub)')
-    plot = ax.plot(y_labels, toPlot)
-    ax.set_aspect('auto')
-    fig.savefig('%s/difference_plot' % parser.output)
-    pyplot.close(fig)
+        max_labels = np.round(np.linspace(45.0, 55.0, 21), 2)
+
+        fig, ax = pyplot.subplots(dpi=600)
+        ax.set_title('')
+        ax.set_xlabel('Iterations')
+        ax.set_ylabel('Stress Scenario')
+
+        ax.set_xticklabels(x_labels)
+        ax.set_yticklabels(y_labels)
+
+        # Generate the pix map
+        plot = ax.contourf(peer_heatmaps, cmap='bone',  vmin=45.0, vmax=50.0)#, interpolation='none')
+        ax.contour(peer_heatmaps, colors = 'k',  vmin=45.0, vmax=50.0)
+        cbar = fig.colorbar(plot)
+        cbar.set_label('Peer Transfer %', rotation=90)
+        ax.set_aspect('auto')
+        fig.savefig('%s/peer_transfer_heatmap' % parser.output)
+        pyplot.close(fig)
+
+        max_labels = np.round(np.linspace(50.0, 55.0, 31), 2)
+
+        fig, ax = pyplot.subplots(dpi=600)
+        ax.set_title('')
+        ax.set_xlabel('Iterations')
+        ax.set_ylabel('Stress Scenario')
+
+        ax.set_xticklabels(x_labels)
+        ax.set_yticklabels(y_labels)
+
+        # Generate the pix map
+        plot = ax.contourf(sub_heatmaps, cmap='bone',  vmin=45, vmax=50.0)#, interpolation='none')
+        ax.contour(sub_heatmaps, colors = 'k', vmin=45.0, vmax=50.0)
+        cbar = fig.colorbar(plot)
+        cbar.set_label('Sub Transfer %', rotation=90)
+        ax.set_aspect('auto')
+        fig.savefig('%s/sub_transfer_heatmap' % parser.output)
+        pyplot.close(fig)
+
+
+        attachment_heatmaps = np.zeros((len(y_labels), 2000))
+        for i, id in enumerate(y_labels):
+            attachment_heatmaps[i] = data[id][25]
+
+        fig, ax = pyplot.subplots(dpi=200)
+        ax.set_title('')
+        ax.set_xlabel('Iterations')
+        ax.set_ylabel('Stress Scenario')
+
+        ax.set_xticklabels(x_labels)
+        ax.set_yticklabels(y_labels)
+
+        # Generate the pix map
+        plot = ax.contourf(attachment_heatmaps, cmap='pink')#, interpolation='none')
+        ax.contour(attachment_heatmaps, colors = 'k')
+        cbar = fig.colorbar(plot)
+        cbar.set_label('Attachment', rotation=90)
+        ax.set_aspect('auto')
+        fig.savefig('%s/attachment_heatmap' % parser.output)
+        pyplot.close(fig)
+
+        ax.set_title('')
+        ax.set_xlabel('Iterations')
+        ax.set_ylabel('Stress Scenario')
+
+        ax.set_xticklabels(x_labels)
+        ax.set_yticklabels(y_labels)
+        pyplot.close(fig)
+
+        fig, ax = pyplot.subplots(dpi=200)
+        # Generate the pix map
+        toPlot = peer_heatmaps - sub_heatmaps
+        plot = ax.contourf(toPlot, cmap='summer', linewidths = 1.0)#, interpolation='none')
+        ax.contour(toPlot, colors = 'k')
+        cbar = fig.colorbar(plot)
+        cbar.set_label('Difference (%)', rotation=90)
+        ax.set_aspect('auto')
+        fig.savefig('%s/difference_heatmap' % parser.output)
+        pyplot.close(fig)
+
+
+
+        toPlot = [data[a][2][1999] - data[a][4][1999] for a in y_labels]
+
+        fig, ax = pyplot.subplots(dpi=200)
+        ax.set_xlabel('Stress Scenarios')
+        ax.set_ylabel('Difference (%) (Peer - Sub)')
+        plot = ax.plot(y_labels, toPlot)
+        ax.set_aspect('auto')
+        fig.savefig('%s/difference_plot' % parser.output)
+        pyplot.close(fig)
 
     for a in data:
         write_plot([a], '%s/transfer_chance/%s_transfer_chance' % (parser.output, a), data,
