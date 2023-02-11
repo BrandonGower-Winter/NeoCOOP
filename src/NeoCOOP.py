@@ -205,6 +205,13 @@ def init_settlements(params : dict):
             agent[HouseholdRelationshipComponent].sub_resource_transfer_chance = model.random.uniform(
                 params['adjust_ranges'][s.id % div_length][2], params['adjust_ranges'][s.id % div_length][3])
 
+        elif params['strategy'] == 'grouped2':
+            s = model.environment[SettlementRelationshipComponent].settlements[0]
+            agent[HouseholdRelationshipComponent].peer_resource_transfer_chance = model.random.uniform(
+                params['adjust_ranges'][agent.id % div_length][0], params['adjust_ranges'][agent.id % div_length][1])
+            agent[HouseholdRelationshipComponent].sub_resource_transfer_chance = model.random.uniform(
+                params['adjust_ranges'][agent.id % div_length][2], params['adjust_ranges'][agent.id % div_length][3])
+
         else:
             s = model.random.choice(model.environment[SettlementRelationshipComponent].settlements)  # Get ID
 
