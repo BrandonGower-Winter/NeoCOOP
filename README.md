@@ -14,6 +14,8 @@ relevant to you) can be found under [resources](./resources/OLD%20Supplementary%
 
 **Note:** This document assumes you are using a UNIX-based OS.
 
+**Note:** Please make sure that you are using a version of `ECAgent < 0.5.0`
+
 To use NeoCOOP, first clone the repo and navigate to the *NeoCOOP/* directory using your favourite terminal application.
 We first need to create a virtual environment for NeoCOOP and we do so by typing:
 

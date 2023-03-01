@@ -6,7 +6,7 @@ mysqlclient
 optuna
 scipy
 scikit-posthocs
-ECAgent
+ECAgent==0.2.2
 Pillow
 argparse
 animatplot
